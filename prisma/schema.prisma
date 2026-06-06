@@ -1,0 +1,119 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+enum Role {
+  ADMIN
+  TEACHER
+  STUDENT
+}
+
+enum EnrollmentStatus {
+  PENDING_PAYMENT
+  PAYMENT_SUBMITTED
+  UNDER_VERIFICATION
+  APPROVED
+  REJECTED
+}
+
+model User {
+  id            String    @id @default(cuid())
+  name          String
+  email         String    @unique
+  passwordHash  String
+  phone         String?
+  role          Role      @default(STUDENT)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  // Relations
+  enrollments         Enrollment[]
+  teachingAssignments TeacherAssignment[]
+  verifiedPayments    Payment[]           @relation("PaymentVerifier")
+}
+
+model Category {
+  id          String   @id @default(cuid())
+  name        String   @unique
+  slug        String   @unique
+  description String?
+  courses     Course[]
+}
+
+model Course {
+  id               String   @id @default(cuid())
+  title            String
+  slug             String   @unique
+  shortDescription String
+  fullDescription  String   @db.Text
+  objectives       String   @db.Text
+  learningOutcomes String   @db.Text
+  schedule         String
+  price            Float
+  thumbnailUrl     String?
+  categoryId       String
+  isPublished      Boolean  @default(false)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  // Relations
+  category    Category            @relation(fields: [categoryId], references: [id])
+  enrollments Enrollment[]
+  teachers    TeacherAssignment[]
+}
+
+model TeacherAssignment {
+  id         String   @id @default(cuid())
+  teacherId  String
+  courseId   String
+  assignedAt DateTime @default(now())
+
+  teacher User   @relation(fields: [teacherId], references: [id])
+  course  Course @relation(fields: [courseId], references: [id])
+
+  @@unique([teacherId, courseId])
+}
+
+model Enrollment {
+  id        String           @id @default(cuid())
+  studentId String
+  courseId  String
+  status    EnrollmentStatus @default(PENDING_PAYMENT)
+  createdAt DateTime         @default(now())
+  updatedAt DateTime         @updatedAt
+
+  student User     @relation(fields: [studentId], references: [id])
+  course  Course   @relation(fields: [courseId], references: [id])
+  payment Payment?
+
+  @@unique([studentId, courseId])
+}
+
+model Payment {
+  id            String   @id @default(cuid())
+  enrollmentId  String   @unique
+  bankName      String
+  accountName   String
+  transferDate  DateTime
+  receiptUrl    String
+  verifiedById  String?
+  verifiedAt    DateTime?
+  adminNotes    String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  enrollment Enrollment @relation(fields: [enrollmentId], references: [id])
+  verifiedBy User?      @relation("PaymentVerifier", fields: [verifiedById], references: [id])
+}
+
+model ContentBlock {
+  id        String   @id @default(cuid())
+  section   String   @unique // e.g., "hero_slider", "about_us", "contact_info"
+  content   String   @db.Text // JSON string payload for CMS content
+  updatedAt DateTime @updatedAt
+}

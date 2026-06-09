@@ -2,10 +2,10 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import prisma from "@/lib/db";
 import { redirect } from "next/navigation";
-import { 
-  Users, 
-  BookOpen, 
-  Award, 
+import {
+  Users,
+  BookOpen,
+  Award,
   Calendar,
   AlertCircle,
   FileText,
@@ -88,11 +88,11 @@ export default async function ParentDashboardPage() {
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
           {/* Main Monitor progress columns */}
           <div className="lg:col-span-2 space-y-8">
-            
+
             {/* Student Monitor Cards */}
             <div className="space-y-6">
               <h2 className="text-xl font-bold text-white">Linked Students</h2>
-              
+
               {children.map((child) => (
                 <div key={child.id} className="bg-slate-950 p-6 rounded-2xl border border-slate-800 space-y-6">
                   <div className="flex justify-between items-start border-b border-slate-900 pb-4">
@@ -116,7 +116,7 @@ export default async function ParentDashboardPage() {
                         <Award className="h-5 w-5" />
                       </div>
                     </div>
-                    
+
                     <div className="bg-slate-900/40 p-4 rounded-xl border border-slate-900/80 flex items-center justify-between">
                       <div>
                         <span className="text-xs text-slate-500 block">Current Status</span>

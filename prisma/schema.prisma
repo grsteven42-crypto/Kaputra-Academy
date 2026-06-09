@@ -1,24 +1,11 @@
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
 }
 
 generator client {
   provider = "prisma-client-js"
-}
-
-enum Role {
-  ADMIN
-  TEACHER
-  STUDENT
-}
-
-enum EnrollmentStatus {
-  PENDING_PAYMENT
-  PAYMENT_SUBMITTED
-  UNDER_VERIFICATION
-  APPROVED
-  REJECTED
 }
 
 model User {
@@ -27,11 +14,15 @@ model User {
   email         String    @unique
   passwordHash  String
   phone         String?
-  role          Role      @default(STUDENT)
+  role          String    @default("STUDENT")
+  studentIdStr  String?   @unique // e.g., KPA-2026-0001
+  parentId      String?   
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 
   // Relations
+  parent              User?               @relation("ParentChild", fields: [parentId], references: [id])
+  children            User[]              @relation("ParentChild")
   enrollments         Enrollment[]
   teachingAssignments TeacherAssignment[]
   verifiedPayments    Payment[]           @relation("PaymentVerifier")
@@ -55,6 +46,7 @@ model Course {
   learningOutcomes String   @db.Text
   schedule         String
   price            Float
+  registrationFee  Float    @default(0)
   thumbnailUrl     String?
   categoryId       String
   isPublished      Boolean  @default(false)
@@ -62,9 +54,10 @@ model Course {
   updatedAt        DateTime @updatedAt
 
   // Relations
-  category    Category            @relation(fields: [categoryId], references: [id])
-  enrollments Enrollment[]
-  teachers    TeacherAssignment[]
+  category      Category            @relation(fields: [categoryId], references: [id])
+  enrollments   Enrollment[]
+  teachers      TeacherAssignment[]
+  registrations Registration[]
 }
 
 model TeacherAssignment {
@@ -79,36 +72,69 @@ model TeacherAssignment {
   @@unique([teacherId, courseId])
 }
 
+model Registration {
+  id                String             @id @default(cuid())
+  studentName       String
+  studentAge        Int
+  parentName        String
+  parentPhone       String
+  parentEmail       String
+  courseId          String
+  status            String             @default("PENDING_PAYMENT")
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
+
+  course            Course             @relation(fields: [courseId], references: [id])
+  payment           Payment?
+  placementTest     PlacementTest?
+}
+
+model Payment {
+  id               String        @id @default(cuid())
+  registrationId   String        @unique
+  amount           Float
+  paymentMethod    String?
+  receiptUrl       String?       // Support for payment receipt uploads
+  status           String        @default("PENDING")
+  verifiedById     String?
+  verifiedAt       DateTime?
+  adminNotes       String?
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
+
+  registration     Registration  @relation(fields: [registrationId], references: [id])
+  verifiedBy       User?         @relation("PaymentVerifier", fields: [verifiedById], references: [id])
+}
+
+model PlacementTest {
+  id               String       @id @default(cuid())
+  registrationId   String       @unique
+  studentIdStr     String       @unique // e.g., KPA-2026-0001
+  testCode         String       @unique // e.g., PT-KPA-8X3F9Q
+  status           String       @default("NOT_STARTED")
+  expiresAt        DateTime?
+  startedAt        DateTime?
+  submittedAt      DateTime?
+  score            Float?
+  answers          String?      @db.Text // JSON for multiple choice answers
+  createdAt        DateTime     @default(now())
+  updatedAt        DateTime     @updatedAt
+
+  registration     Registration @relation(fields: [registrationId], references: [id])
+}
+
 model Enrollment {
   id        String           @id @default(cuid())
   studentId String
   courseId  String
-  status    EnrollmentStatus @default(PENDING_PAYMENT)
+  status    String           @default("ACTIVE")
   createdAt DateTime         @default(now())
   updatedAt DateTime         @updatedAt
 
-  student User     @relation(fields: [studentId], references: [id])
-  course  Course   @relation(fields: [courseId], references: [id])
-  payment Payment?
+  student   User     @relation(fields: [studentId], references: [id])
+  course    Course   @relation(fields: [courseId], references: [id])
 
   @@unique([studentId, courseId])
-}
-
-model Payment {
-  id            String   @id @default(cuid())
-  enrollmentId  String   @unique
-  bankName      String
-  accountName   String
-  transferDate  DateTime
-  receiptUrl    String
-  verifiedById  String?
-  verifiedAt    DateTime?
-  adminNotes    String?
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
-
-  enrollment Enrollment @relation(fields: [enrollmentId], references: [id])
-  verifiedBy User?      @relation("PaymentVerifier", fields: [verifiedById], references: [id])
 }
 
 model ContentBlock {

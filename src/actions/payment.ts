@@ -1,0 +1,63 @@
+"use server";
+
+import prisma from "@/lib/db";
+import { redirect } from "next/navigation";
+import { writeFile, mkdir } from "fs/promises";
+import path from "path";
+
+export async function uploadReceipt(formData: FormData) {
+  const paymentId = formData.get("paymentId") as string;
+  const receiptFile = formData.get("receiptFile") as File;
+
+  if (!paymentId || !receiptFile || receiptFile.size === 0) {
+    throw new Error("Missing required fields or empty file");
+  }
+
+  // Ensure it's an image
+  if (!receiptFile.type.startsWith("image/")) {
+    throw new Error("Please upload a valid image file");
+  }
+
+  const bytes = await receiptFile.arrayBuffer();
+  const buffer = Buffer.from(bytes);
+
+  // Generate a unique filename
+  const filename = `${Date.now()}-${receiptFile.name.replace(/[^a-zA-Z0-9.-]/g, "_")}`;
+  const uploadDir = path.join(process.cwd(), "public", "uploads");
+
+  try {
+    await mkdir(uploadDir, { recursive: true });
+  } catch (e) {
+    // Ignore if directory exists
+  }
+
+  const filepath = path.join(uploadDir, filename);
+  await writeFile(filepath, buffer);
+
+  const receiptUrl = `/uploads/${filename}`;
+
+  // Update payment status
+  await prisma.payment.update({
+    where: { id: paymentId },
+    data: {
+      receiptUrl,
+      status: "VERIFYING",
+      paymentMethod: "Manual Bank Transfer", // mock
+    },
+  });
+
+  const payment = await prisma.payment.findUnique({
+    where: { id: paymentId },
+    select: { registrationId: true },
+  });
+
+  if (payment) {
+    await prisma.registration.update({
+      where: { id: payment.registrationId },
+      data: { status: "VERIFYING" },
+    });
+  }
+
+  // Redirect to success page
+  redirect(`/payment/${paymentId}/success`);
+}

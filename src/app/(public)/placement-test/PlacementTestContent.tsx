@@ -8,43 +8,11 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Clock, ShieldCheck, CheckCircle2, AlertTriangle, Play } from "lucide-react";
 
-const QUESTIONS = [
-  {
-    id: "q1",
-    question: "If a train travels 120 km in 2 hours, what is its average speed in km/h?",
-    options: ["50 km/h", "60 km/h", "70 km/h", "80 km/h"],
-  },
-  {
-    id: "q2",
-    question: "Which of the following sentences is grammatically correct?",
-    options: [
-      "He don't like apples.",
-      "She like to read books.",
-      "They have went to the store.",
-      "We are going to school.",
-    ],
-  },
-  {
-    id: "q3",
-    question: "If all cats are mammals, and all mammals have fur, which of the following is true?",
-    options: [
-      "All cats have fur.",
-      "Some cats do not have fur.",
-      "All mammals are cats.",
-      "No cats have fur.",
-    ],
-  },
-  {
-    id: "q4",
-    question: "What is the chemical symbol for water?",
-    options: ["CO2", "H2O", "NaCl", "O2"],
-  },
-  {
-    id: "q5",
-    question: "What is the primary curriculum followed at Kaputra Academy?",
-    options: ["Cambridge Curriculum", "Singapore Curriculum", "IB Curriculum", "National Curriculum"],
-  },
-];
+interface Question {
+  id: string;
+  question: string;
+  options: string[];
+}
 
 export default function PlacementTestContent() {
   const searchParams = useSearchParams();
@@ -60,6 +28,7 @@ export default function PlacementTestContent() {
   // Exam states
   const [studentName, setStudentName] = useState("");
   const [answers, setAnswers] = useState<Record<string, string>>({});
+  const [questions, setQuestions] = useState<Question[]>([]);
   const [timeLeft, setTimeLeft] = useState(900); // 15 minutes in seconds
   const [isSubmitted, setIsSubmitted] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
@@ -83,6 +52,7 @@ export default function PlacementTestContent() {
     if (res.success) {
       setStudentName(res.studentName || "");
       setAnswers(res.savedAnswers || {});
+      setQuestions((res.questions as Question[]) || []);
       setIsValidated(true);
     } else {
       setError(res.error || "Failed to validate details.");
@@ -179,14 +149,14 @@ export default function PlacementTestContent() {
             Your answers have been stored and the code is now marked as used.
           </p>
           <div className="bg-slate-950 p-4 rounded-xl border border-slate-800 text-sm">
-            <p className="text-[#CA8E25] font-bold mb-1">Next Step: Account Activation</p>
-            <p className="text-slate-400">You must set up passwords for your Student and Parent accounts.</p>
+            <p className="text-[#CA8E25] font-bold mb-1">Next Step: Tuition Payment</p>
+            <p className="text-slate-400">Your parent has been notified of your results. Please proceed to pay the tuition invoice to complete your class enrollment.</p>
           </div>
           <Button
-            onClick={() => router.push(`/activate?studentId=${studentId}`)}
+            onClick={() => router.push("/student")}
             className="w-full bg-[#CA8E25] hover:bg-[#D89A2B] text-black font-bold py-3 rounded-xl shadow-lg transition-all"
           >
-            Activate Accounts
+            Go to Dashboard
           </Button>
         </div>
       </main>
@@ -217,7 +187,7 @@ export default function PlacementTestContent() {
 
           {/* Questions List */}
           <div className="space-y-6">
-            {QUESTIONS.map((q, idx) => (
+            {questions.map((q, idx) => (
               <div key={q.id} className="bg-slate-900 border border-slate-800 rounded-2xl p-6 space-y-4">
                 <h3 className="text-lg font-bold">
                   {idx + 1}. {q.question}

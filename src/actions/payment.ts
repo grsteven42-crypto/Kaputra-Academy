@@ -13,9 +13,9 @@ export async function uploadReceipt(formData: FormData) {
     throw new Error("Missing required fields or empty file");
   }
 
-  // Ensure it's an image
-  if (!receiptFile.type.startsWith("image/")) {
-    throw new Error("Please upload a valid image file");
+  // Ensure it's an image or PDF
+  if (!receiptFile.type.startsWith("image/") && receiptFile.type !== "application/pdf") {
+     throw new Error("Please upload a valid image or PDF file");
   }
 
   const bytes = await receiptFile.arrayBuffer();
@@ -52,10 +52,22 @@ export async function uploadReceipt(formData: FormData) {
   });
 
   if (payment) {
-    await prisma.registration.update({
+    const reg = await prisma.registration.findUnique({
       where: { id: payment.registrationId },
-      data: { status: "VERIFYING" },
     });
+
+    if (reg) {
+      let nextStatus = "VERIFYING";
+      if (reg.status === "PENDING_PT_PAYMENT") {
+        nextStatus = "VERIFYING_PT_PAYMENT";
+      } else if (reg.status === "PENDING_ENROLLMENT_PAYMENT") {
+        nextStatus = "VERIFYING_ENROLLMENT_PAYMENT";
+      }
+      await prisma.registration.update({
+        where: { id: payment.registrationId },
+        data: { status: nextStatus },
+      });
+    }
   }
 
   // Redirect to success page

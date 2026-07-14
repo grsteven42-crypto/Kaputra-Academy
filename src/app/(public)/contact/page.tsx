@@ -1,9 +1,28 @@
 "use client";
 
+import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
+import { getContentBlocks } from "@/actions/cms";
 
 export default function ContactPage() {
+  const [contactBlock, setContactBlock] = useState<any>(null);
+
+  useEffect(() => {
+    async function loadCmsData() {
+      try {
+        const res = await getContentBlocks();
+        if (res.success && res.blocks) {
+          const contact = res.blocks.find((b: any) => b.section === "contact_info");
+          if (contact) setContactBlock(JSON.parse(contact.content));
+        }
+      } catch (e) {
+        console.error("Failed to load CMS contact data:", e);
+      }
+    }
+    loadCmsData();
+  }, []);
+
   return (
     <div className="w-full bg-slate-50 min-h-screen pb-20">
       <section className="bg-white border-b border-slate-100 py-16 text-center">
@@ -16,7 +35,7 @@ export default function ContactPage() {
       <div className="container mx-auto px-4 mt-12 max-w-5xl">
         <div className="grid md:grid-cols-2 gap-10">
           {/* Contact Info */}
-          <motion.div 
+          <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             className="bg-white p-8 rounded-2xl shadow-sm border border-slate-100"
@@ -25,25 +44,25 @@ export default function ContactPage() {
             <div className="space-y-6 text-slate-600">
               <div>
                 <h3 className="font-semibold text-slate-900">Address</h3>
-                <p>123 Education Lane, Tech City, TC 10101</p>
+                <p>{contactBlock?.address || ""}</p>
               </div>
               <div>
                 <h3 className="font-semibold text-slate-900">Email</h3>
-                <p>support@kaputra.com</p>
+                <p>{contactBlock?.email || ""}</p>
               </div>
               <div>
                 <h3 className="font-semibold text-slate-900">Phone / WhatsApp</h3>
-                <p>+1 (555) 123-4567</p>
+                <p>{contactBlock?.phone || ""}</p>
               </div>
               <div>
                 <h3 className="font-semibold text-slate-900">Business Hours</h3>
-                <p>Mon - Fri: 9:00 AM - 6:00 PM</p>
+                <p>{contactBlock?.hours || ""}</p>
               </div>
             </div>
           </motion.div>
 
           {/* Contact Form */}
-          <motion.div 
+          <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.1 }}

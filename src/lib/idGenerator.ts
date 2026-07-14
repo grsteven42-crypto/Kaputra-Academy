@@ -1,34 +1,49 @@
 import prisma from "./db";
 
-// Helper to generate the next Student ID (e.g., KPA-2026-0001)
-export async function generateStudentId(): Promise<string> {
-  const currentYear = new Date().getFullYear();
-  const yearPrefix = `KPA-${currentYear}-`;
+// Helper to generate the next Student ID based on initials and DOB (e.g., MDC211006)
+export async function generateStudentId(name: string, dobInput: string | Date): Promise<string> {
+  const cleanName = name.trim().replace(/\s+/g, " ");
+  const words = cleanName.split(" ");
+  let initials = words.map(w => w.charAt(0)).join("").toUpperCase();
+  if (!initials) {
+    initials = "KPA"; // Fallback initials
+  }
 
-  // Find the highest student ID for the current year
-  const lastStudent = await prisma.placementTest.findFirst({
+  // Parse DOB
+  const dob = typeof dobInput === "string" ? new Date(dobInput) : dobInput;
+  const day = String(dob.getDate()).padStart(2, "0");
+  const month = String(dob.getMonth() + 1).padStart(2, "0");
+  const year = String(dob.getFullYear()).slice(-2); // Get last 2 digits of year (e.g., 2006 -> 06)
+  const dobStr = `${day}${month}${year}`;
+
+  const baseId = `${initials}${dobStr}`;
+
+  // Find unique ID in db (check User table) with a single query to avoid connection pool exhaustion
+  const existingUsers = await prisma.user.findMany({
     where: {
       studentIdStr: {
-        startsWith: yearPrefix,
+        startsWith: baseId,
       },
     },
-    orderBy: {
-      studentIdStr: "desc",
+    select: {
+      studentIdStr: true,
     },
   });
 
-  let nextNumber = 1;
-  if (lastStudent && lastStudent.studentIdStr) {
-    const parts = lastStudent.studentIdStr.split("-");
-    const lastNum = parseInt(parts[2], 10);
-    if (!isNaN(lastNum)) {
-      nextNumber = lastNum + 1;
-    }
+  const existingIds = new Set(
+    existingUsers
+      .map((u) => u.studentIdStr)
+      .filter((id): id is string => !!id)
+  );
+
+  let studentId = baseId;
+  let counter = 2;
+  while (existingIds.has(studentId)) {
+    studentId = `${baseId}-${counter}`;
+    counter++;
   }
 
-  // Format as KPA-YYYY-XXXX (padded to 4 digits)
-  const paddedNumber = String(nextNumber).padStart(4, "0");
-  return `${yearPrefix}${paddedNumber}`;
+  return studentId;
 }
 
 // Helper to generate a unique Placement Test Code (e.g., PT-KPA-8X3F9Q)

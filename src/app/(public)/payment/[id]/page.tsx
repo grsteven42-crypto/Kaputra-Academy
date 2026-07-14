@@ -37,6 +37,7 @@ export default async function PaymentPage({ params }: { params: Promise<{ id: st
 
   const { registration } = payment;
   const { course } = registration;
+  const isPlacementTest = registration.status === "PENDING_PT_PAYMENT";
 
   return (
     <main className="min-h-screen bg-gray-50 flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8">
@@ -57,16 +58,27 @@ export default async function PaymentPage({ params }: { params: Promise<{ id: st
           </div>
           <div className="flex justify-between items-center border-b border-blue-200 pb-3">
             <span className="text-gray-600">Selected Program</span>
-            <span className="font-semibold text-[#072147]">{course.title}</span>
+            <span className="font-semibold text-[#072147]">
+              {course.title} {isPlacementTest && "(Placement Test)"}
+            </span>
           </div>
-          <div className="flex justify-between items-center border-b border-blue-200 pb-3">
-            <span className="text-gray-600">Course Fee</span>
-            <span className="font-semibold text-[#072147]">Rp {course.price.toLocaleString("id-ID")}</span>
-          </div>
-          <div className="flex justify-between items-center border-b border-blue-200 pb-3">
-            <span className="text-gray-600">Registration Fee</span>
-            <span className="font-semibold text-[#072147]">Rp {course.registrationFee.toLocaleString("id-ID")}</span>
-          </div>
+          {!isPlacementTest ? (
+            <>
+              <div className="flex justify-between items-center border-b border-blue-200 pb-3">
+                <span className="text-gray-600">Course Fee</span>
+                <span className="font-semibold text-[#072147]">Rp {course.price.toLocaleString("id-ID")}</span>
+              </div>
+              <div className="flex justify-between items-center border-b border-blue-200 pb-3">
+                <span className="text-gray-600">Registration Fee</span>
+                <span className="font-semibold text-[#072147]">Rp {course.registrationFee.toLocaleString("id-ID")}</span>
+              </div>
+            </>
+          ) : (
+            <div className="flex justify-between items-center border-b border-blue-200 pb-3">
+              <span className="text-gray-600">Fee Category</span>
+              <span className="font-semibold text-amber-600">Placement Test Entry Fee</span>
+            </div>
+          )}
           <div className="flex justify-between items-center pt-2">
             <span className="text-lg font-bold text-[#072147]">Total Amount</span>
             <span className="text-xl font-black text-[#CA8E25]">Rp {payment.amount.toLocaleString("id-ID")}</span>

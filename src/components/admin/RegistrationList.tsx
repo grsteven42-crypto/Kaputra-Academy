@@ -37,11 +37,19 @@ export default function RegistrationList({
   initialRegistrations: RegistrationWithCourse[];
 }) {
   const [registrations, setRegistrations] = useState(initialRegistrations);
-  const [activeTab, setActiveTab] = useState<"PENDING_PAYMENT" | "VERIFYING" | "APPROVED" | "REJECTED">("VERIFYING");
+  const [activeTab, setActiveTab] = useState<"PENDING" | "VERIFYING" | "APPROVED" | "REJECTED">("VERIFYING");
   const [selectedReg, setSelectedReg] = useState<RegistrationWithCourse | null>(null);
   const [loadingId, setLoadingId] = useState<string | null>(null);
 
-  const filtered = registrations.filter((r) => r.status === activeTab);
+  const filtered = registrations.filter((r) => {
+    if (activeTab === "VERIFYING") {
+      return r.status === "VERIFYING" || r.status === "VERIFYING_PT_PAYMENT" || r.status === "VERIFYING_ENROLLMENT_PAYMENT";
+    }
+    if (activeTab === "PENDING") {
+      return r.status === "PENDING_PAYMENT" || r.status === "PENDING_PT_PAYMENT" || r.status === "PENDING_ENROLLMENT_PAYMENT" || r.status === "PT_ELIGIBLE" || r.status === "QUALIFIED" || r.status === "NOT_QUALIFIED";
+    }
+    return r.status === activeTab;
+  });
 
   const handleApprove = async (id: string) => {
     if (!confirm("Are you sure you want to approve this enrollment?")) return;
@@ -49,15 +57,22 @@ export default function RegistrationList({
     const res = await approveRegistration(id);
     setLoadingId(null);
     if (res.success) {
-      alert(`Enrollment approved!\nStudent ID: ${res.studentId}\nTest Code: ${res.testCode}`);
+      if (res.isPlacementTest) {
+        alert(`Placement Test Fee Approved!\nStudent ID: ${res.studentId}\nTest Code: ${res.testCode}`);
+      } else {
+        alert(`Enrollment Approved!\nStudent ID: ${res.studentId}\nCourse enrollment is now active.`);
+      }
+      
       // Update local state
       setRegistrations((prev) =>
         prev.map((r) =>
           r.id === id
             ? {
                 ...r,
-                status: "APPROVED",
-                placementTest: { studentIdStr: res.studentId!, testCode: res.testCode! },
+                status: res.isPlacementTest ? "PT_ELIGIBLE" : "APPROVED",
+                placementTest: res.isPlacementTest 
+                  ? { studentIdStr: res.studentId!, testCode: res.testCode! } 
+                  : r.placementTest,
               }
             : r
         )
@@ -88,11 +103,19 @@ export default function RegistrationList({
     <div className="space-y-6">
       {/* Tab Controls */}
       <div className="flex border-b border-slate-800 gap-2 overflow-x-auto pb-1">
-        {(["VERIFYING", "PENDING_PAYMENT", "APPROVED", "REJECTED"] as const).map((tab) => {
-          const count = registrations.filter((r) => r.status === tab).length;
+        {(["VERIFYING", "PENDING", "APPROVED", "REJECTED"] as const).map((tab) => {
+          const count = registrations.filter((r) => {
+            if (tab === "VERIFYING") {
+              return r.status === "VERIFYING" || r.status === "VERIFYING_PT_PAYMENT" || r.status === "VERIFYING_ENROLLMENT_PAYMENT";
+            }
+            if (tab === "PENDING") {
+              return r.status === "PENDING_PAYMENT" || r.status === "PENDING_PT_PAYMENT" || r.status === "PENDING_ENROLLMENT_PAYMENT" || r.status === "PT_ELIGIBLE" || r.status === "QUALIFIED" || r.status === "NOT_QUALIFIED";
+            }
+            return r.status === tab;
+          }).length;
           const labelMap = {
             VERIFYING: "Verification Queue",
-            PENDING_PAYMENT: "Pending Payment",
+            PENDING: "Pending Flow",
             APPROVED: "Approved",
             REJECTED: "Rejected",
           };
@@ -134,7 +157,20 @@ export default function RegistrationList({
                     {new Date(reg.createdAt).toLocaleDateString()}
                   </span>
                 </div>
-                <h3 className="text-lg font-bold text-white">{reg.studentName} (Age: {reg.studentAge})</h3>
+                <h3 className="text-lg font-bold text-white flex items-center gap-2 flex-wrap">
+                  {reg.studentName} (Age: {reg.studentAge})
+                  <span className={`text-[10px] px-2 py-0.5 rounded-full font-mono font-bold border ${
+                    reg.status.startsWith("VERIFYING") 
+                      ? "bg-amber-500/10 text-amber-400 border-amber-500/20" 
+                      : reg.status === "APPROVED" 
+                      ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20"
+                      : reg.status === "REJECTED"
+                      ? "bg-rose-500/10 text-rose-400 border-rose-500/20"
+                      : "bg-blue-500/10 text-blue-400 border-blue-500/20"
+                  }`}>
+                    {reg.status}
+                  </span>
+                </h3>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-1 text-sm text-slate-400">
                   <span className="flex items-center gap-1">
                     <BookOpen className="h-3.5 w-3.5 text-[#CA8E25]" />
@@ -160,7 +196,7 @@ export default function RegistrationList({
                   Review Details
                 </Button>
 
-                {reg.status === "VERIFYING" && (
+                {(reg.status === "VERIFYING" || reg.status === "VERIFYING_PT_PAYMENT" || reg.status === "VERIFYING_ENROLLMENT_PAYMENT") && (
                   <>
                     <Button
                       size="sm"
@@ -261,14 +297,14 @@ export default function RegistrationList({
               )}
             </div>
 
-            {selectedReg.status === "VERIFYING" && (
+            {(selectedReg.status === "VERIFYING" || selectedReg.status === "VERIFYING_PT_PAYMENT" || selectedReg.status === "VERIFYING_ENROLLMENT_PAYMENT") && (
               <div className="flex gap-2 pt-2">
                 <Button
                   className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl py-2.5 font-bold"
                   disabled={loadingId === selectedReg.id}
                   onClick={() => handleApprove(selectedReg.id)}
                 >
-                  Approve Enrollment
+                  Approve Payment
                 </Button>
                 <Button
                   variant="outline"
@@ -276,7 +312,7 @@ export default function RegistrationList({
                   disabled={loadingId === selectedReg.id}
                   onClick={() => handleReject(selectedReg.id)}
                 >
-                  Reject Enrollment
+                  Reject Payment
                 </Button>
               </div>
             )}

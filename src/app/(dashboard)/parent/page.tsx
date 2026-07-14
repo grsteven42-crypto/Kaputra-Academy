@@ -14,6 +14,9 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
+import ParentDashboardClient from "./ParentDashboardClient";
+
+export const dynamic = "force-dynamic";
 
 export const metadata = {
   title: "Parent Dashboard | Kaputra Academy",
@@ -27,17 +30,19 @@ export default async function ParentDashboardPage() {
   }
 
   // Fetch parent user along with their children students
-  const parent = await prisma.user.findUnique({
+  const parent: any = await prisma.user.findUnique({
     where: { id: session.user.id },
     include: {
       children: {
         include: {
           enrollments: {
             where: { status: "ACTIVE" },
-            include: {
-              course: true,
-            },
           },
+          academicReports: {
+            include: { course: { select: { title: true } } },
+            orderBy: { updatedAt: "desc" },
+          },
+          attendanceRecords: true,
         },
       },
     },
@@ -47,24 +52,55 @@ export default async function ParentDashboardPage() {
     redirect("/login");
   }
 
-  const children = parent.children;
+  const children = parent.children || [];
 
-  // Mock progress report data and notifications
-  const reports = children.map((child) => ({
-    childName: child.name,
-    studentId: child.studentIdStr,
-    term: "Term 1, 2026",
-    attendance: "95%",
-    grades: "A",
-    comments: "Excellent work in practical tasks. Consistent participation.",
-  }));
+  // Fetch course mapping
+  const allCourses = await prisma.course.findMany({
+    select: { id: true, title: true, type: true },
+  });
+  const courseMap = new Map(allCourses.map(c => [c.id, c]));
 
-  const notifications = [
-    { id: 1, title: "Academic Report Published", content: "The midterm progress reports have been released. You can view them in the Reports section.", date: "June 8, 2026" },
-    { id: 2, title: "Upcoming Parent-Teacher Meeting", content: "Parent-Teacher Association meeting is scheduled for June 28th at 9:00 AM.", date: "June 3, 2026" },
-  ];
+  // Get all active course IDs for all children
+  const childIds = children.map((c: any) => c.id);
+  const childEnrollments = await prisma.enrollment.findMany({
+    where: { studentId: { in: childIds }, status: "ACTIVE" },
+    select: { itemId: true },
+  });
+  const courseIds = Array.from(new Set(childEnrollments.map((e) => e.itemId)));
+
+  // Fetch published announcements targeted to parents/both matching children's courses or general,
+  // AND either no specific targets or at least one of this parent's children is targeted
+  const announcements = await prisma.announcement.findMany({
+    where: {
+      isPublished: true,
+      publishDate: { lte: new Date() },
+      targetAudience: { in: ["PARENTS", "BOTH"] },
+      OR: [
+        { courseId: null },
+        { courseId: { in: courseIds } },
+      ],
+      AND: [
+        {
+          OR: [
+            { targetStudents: { none: {} } }, // Broadcast to all
+            { targetStudents: { some: { id: { in: childIds } } } }, // At least one child is targeted
+          ],
+        },
+      ],
+    },
+    include: {
+      teacher: { select: { name: true } },
+      course: { select: { title: true } },
+      targetStudents: {
+        where: { id: { in: childIds } },
+        select: { id: true, name: true },
+      },
+    },
+    orderBy: { publishDate: "desc" },
+  });
 
   return (
+    <ParentDashboardClient>
     <div className="space-y-8">
       {/* Welcome banner */}
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
@@ -73,7 +109,9 @@ export default async function ParentDashboardPage() {
           <p className="text-slate-400">Parent Dashboard • Monitor your child's academic progress</p>
         </div>
         <Link href="/api/auth/signout">
-          <Button variant="outline" className="border-slate-800 hover:bg-slate-900 text-slate-300 rounded-xl gap-2">
+          <Button
+            className="bg-red-600 text-white hover:bg-red-700 rounded-xl gap-2"
+          >
             <LogOut className="h-4 w-4" />
             Sign Out
           </Button>
@@ -93,101 +131,188 @@ export default async function ParentDashboardPage() {
             <div className="space-y-6">
               <h2 className="text-xl font-bold text-white">Linked Students</h2>
 
-              {children.map((child) => (
-                <div key={child.id} className="bg-slate-950 p-6 rounded-2xl border border-slate-800 space-y-6">
-                  <div className="flex justify-between items-start border-b border-slate-900 pb-4">
-                    <div>
-                      <h3 className="text-lg font-bold text-white">{child.name}</h3>
-                      <p className="text-xs text-slate-500">Student ID: <span className="font-mono text-[#CA8E25] font-semibold">{child.studentIdStr}</span></p>
-                    </div>
-                    <span className="px-3 py-1 rounded-full text-xs font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
-                      Active
-                    </span>
-                  </div>
+              {children.map((child: any) => {
+                // Compute attendance rate dynamically
+                const presentCount = child.attendanceRecords?.filter((a: any) => a.status === "PRESENT" || a.status === "LATE").length || 0;
+                const totalCount = child.attendanceRecords?.length || 0;
+                const attendancePercent = totalCount > 0 ? `${Math.round((presentCount / totalCount) * 100)}%` : "100%";
 
-                  {/* Attendance & Stats grid */}
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <div className="bg-slate-900/40 p-4 rounded-xl border border-slate-900/80 flex items-center justify-between">
+                // Compute average progress
+                const avgProgress = child.academicReports?.length > 0
+                  ? `${Math.round(child.academicReports.reduce((s: number, r: any) => s + r.progress, 0) / child.academicReports.length)}% Avg`
+                  : "Good Standing";
+
+                return (
+                  <div key={child.id} className="bg-slate-950 p-6 rounded-2xl border border-slate-800 space-y-6">
+                    <div className="flex justify-between items-start border-b border-slate-900 pb-4">
                       <div>
-                        <span className="text-xs text-slate-500 block">Class Attendance</span>
-                        <span className="text-xl font-extrabold text-white mt-1">95%</span>
+                        <h3 className="text-lg font-bold text-white">{child.name}</h3>
+                        <p className="text-xs text-slate-500">Student ID: <span className="font-mono text-[#CA8E25] font-semibold">{child.studentIdStr || "—"}</span></p>
                       </div>
-                      <div className="w-10 h-10 rounded-lg bg-emerald-600/10 flex items-center justify-center text-emerald-400">
-                        <Award className="h-5 w-5" />
-                      </div>
+                      <span className="px-3 py-1 rounded-full text-xs font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                        Active
+                      </span>
                     </div>
 
-                    <div className="bg-slate-900/40 p-4 rounded-xl border border-slate-900/80 flex items-center justify-between">
-                      <div>
-                        <span className="text-xs text-slate-500 block">Current Status</span>
-                        <span className="text-xl font-extrabold text-white mt-1">Good Standing</span>
-                      </div>
-                      <div className="w-10 h-10 rounded-lg bg-blue-600/10 flex items-center justify-center text-blue-400">
-                        <BookOpen className="h-5 w-5" />
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Course list */}
-                  <div className="space-y-3">
-                    <h4 className="text-sm font-semibold text-slate-400">Enrolled Programs</h4>
-                    {child.enrollments.map((enrollment) => (
-                      <div key={enrollment.id} className="bg-slate-900/50 p-4 rounded-xl border border-slate-900 flex justify-between items-center text-sm">
+                    {/* Attendance & Stats grid */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <div className="bg-slate-900/40 p-4 rounded-xl border border-slate-900/80 flex items-center justify-between">
                         <div>
-                          <p className="font-bold text-white">{enrollment.course.title}</p>
-                          <p className="text-xs text-slate-500">Schedule: {enrollment.course.schedule}</p>
+                          <span className="text-xs text-slate-500 block">Class Attendance</span>
+                          <span className="text-xl font-extrabold text-white mt-1">{attendancePercent}</span>
                         </div>
-                        <span className="text-xs text-[#CA8E25] font-semibold">In Progress</span>
+                        <div className="w-10 h-10 rounded-lg bg-emerald-600/10 flex items-center justify-center text-emerald-400">
+                          <Award className="h-5 w-5" />
+                        </div>
                       </div>
-                    ))}
+
+                      <div className="bg-slate-900/40 p-4 rounded-xl border border-slate-900/80 flex items-center justify-between">
+                        <div>
+                          <span className="text-xs text-slate-500 block">Academic Progress</span>
+                          <span className="text-xl font-extrabold text-white mt-1">{avgProgress}</span>
+                        </div>
+                        <div className="w-10 h-10 rounded-lg bg-blue-600/10 flex items-center justify-center text-blue-400">
+                          <BookOpen className="h-5 w-5" />
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Course list */}
+                    <div className="space-y-3">
+                      <h4 className="text-sm font-semibold text-slate-400">Enrolled Programs</h4>
+                      {child.enrollments.length > 0 ? (
+                        child.enrollments.map((enrollment: any) => {
+                          const courseInfo = courseMap.get(enrollment.itemId);
+                          const title = courseInfo ? courseInfo.title : enrollment.itemId;
+                          const courseType = courseInfo 
+                            ? (courseInfo.type === "COMPETITION" ? "Competition Class" : "Regular Class") 
+                            : enrollment.itemType;
+
+                          return (
+                            <div key={enrollment.id} className="bg-slate-900/50 p-4 rounded-xl border border-slate-900 flex justify-between items-center text-sm">
+                              <div>
+                                <p className="font-bold text-white">{title}</p>
+                                <p className="text-xs text-slate-500">Type: {courseType}</p>
+                              </div>
+                              <span className="text-xs text-[#CA8E25] font-semibold">In Progress</span>
+                            </div>
+                          );
+                        })
+                      ) : (
+                        <p className="text-slate-500 text-xs italic">Not enrolled in any active classes.</p>
+                      )}
+                    </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
 
             {/* Reports section */}
             <div className="space-y-4 pt-4">
               <h2 className="text-xl font-bold text-white">Academic Reports</h2>
               <div className="space-y-4">
-                {reports.map((report, idx) => (
-                  <div key={idx} className="bg-slate-950 p-6 rounded-2xl border border-slate-800 space-y-4">
-                    <div className="flex justify-between items-center">
-                      <div>
-                        <h4 className="font-bold text-[#CA8E25]">{report.childName}</h4>
-                        <p className="text-xs text-slate-500">{report.term}</p>
+                {children.some((child: any) => child.academicReports?.length > 0) ? (
+                  children.map((child: any) => 
+                    child.academicReports.map((report: any) => (
+                      <div key={report.id} className="bg-slate-950 p-6 rounded-2xl border border-slate-800 space-y-4">
+                        <div className="flex justify-between items-start">
+                          <div>
+                            <h4 className="font-bold text-white flex items-center gap-2">
+                              <BookOpen className="h-4 w-4 text-[#CA8E25]" />
+                              {report.course.title}
+                            </h4>
+                            <p className="text-xs text-slate-500 mt-1">Student: <span className="font-bold text-slate-300">{child.name}</span></p>
+                          </div>
+                          <span className={`text-sm font-black px-2.5 py-0.5 rounded-xl border ${
+                            report.grade.startsWith("A") ? "text-emerald-400 bg-emerald-500/10 border-emerald-500/20"
+                              : report.grade.startsWith("B") ? "text-blue-400 bg-blue-500/10 border-blue-500/20"
+                              : "text-amber-400 bg-amber-500/10 border-amber-500/20"
+                          }`}>
+                            {report.grade}
+                          </span>
+                        </div>
+
+                        {/* Progress bar */}
+                        <div className="space-y-1.5">
+                          <div className="flex justify-between text-xs">
+                            <span className="text-slate-500">Completion</span>
+                            <span className="font-bold text-white">{report.progress}%</span>
+                          </div>
+                          <div className="w-full bg-slate-900 rounded-full h-2">
+                            <div className="bg-gradient-to-r from-[#CA8E25] to-amber-400 h-2 rounded-full transition-all"
+                              style={{ width: `${report.progress}%` }} />
+                          </div>
+                        </div>
+
+                        {report.completedModules && (
+                          <p className="text-xs text-slate-400"><span className="font-bold text-slate-300">Modules:</span> {report.completedModules}</p>
+                        )}
+                        {report.skillAssessment && (
+                          <p className="text-xs text-slate-400"><span className="font-bold text-slate-300">Skills:</span> {report.skillAssessment}</p>
+                        )}
+                        {report.teacherNotes && (
+                          <p className="text-xs text-slate-300 bg-slate-900/50 px-3 py-2.5 rounded-xl border border-slate-900">
+                            <span className="font-bold text-slate-400">Notes: </span> 
+                            "{report.teacherNotes}"
+                          </p>
+                        )}
                       </div>
-                      <div className="text-right">
-                        <span className="text-xs text-slate-500 block">Grade</span>
-                        <span className="text-xl font-black text-emerald-400">{report.grades}</span>
-                      </div>
-                    </div>
-                    <div className="bg-slate-900/40 p-4 rounded-xl border border-slate-900 text-sm space-y-2">
-                      <p className="text-xs text-slate-500">Instructor Comments:</p>
-                      <p className="text-slate-300 leading-relaxed">"{report.comments}"</p>
-                    </div>
+                    ))
+                  )
+                ) : (
+                  <div className="bg-slate-950 p-8 border border-slate-800 rounded-2xl text-center text-slate-500 text-sm">
+                    No progress or academic report data available for your children yet.
                   </div>
-                ))}
+                )}
               </div>
             </div>
           </div>
 
-          {/* Notifications sidebar */}
+          {/* Announcements sidebar */}
           <div className="space-y-6">
-            <h2 className="text-xl font-bold text-white">Notifications</h2>
-            <div className="bg-slate-950 p-6 rounded-2xl border border-slate-800 space-y-4">
-              {notifications.map((notif) => (
-                <div key={notif.id} className="space-y-2 border-b border-slate-900 pb-4 last:border-0 last:pb-0">
-                  <div className="flex justify-between items-center">
-                    <h4 className="font-bold text-white text-sm">{notif.title}</h4>
-                    <span className="text-[10px] text-slate-500 flex items-center gap-1"><Clock className="h-3 w-3" /> {notif.date}</span>
+            <h2 className="text-xl font-bold text-white">Announcements</h2>
+            <div className="bg-slate-950 p-6 rounded-2xl border border-slate-800 space-y-5 max-h-[800px] overflow-y-auto">
+              {announcements.length > 0 ? (
+                announcements.map((notif) => (
+                  <div key={notif.id} className="space-y-2.5 border-b border-slate-900 pb-4 last:border-0 last:pb-0">
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      {notif.targetStudents.length > 0 ? (
+                        <span className="text-[9px] font-extrabold uppercase tracking-wider text-amber-400 bg-amber-600/10 px-2 py-0.5 rounded-full border border-amber-500/20">
+                          For: {notif.targetStudents.map((s) => s.name).join(", ")}
+                        </span>
+                      ) : notif.course ? (
+                        <span className="text-[9px] font-extrabold uppercase tracking-wider text-[#CA8E25] bg-[#CA8E25]/10 px-2 py-0.5 rounded-full border border-[#CA8E25]/20">
+                          {notif.course.title}
+                        </span>
+                      ) : (
+                        <span className="text-[9px] font-extrabold uppercase tracking-wider text-purple-400 bg-purple-600/10 px-2 py-0.5 rounded-full border border-purple-500/20">
+                          General
+                        </span>
+                      )}
+                      <span className="text-[9px] font-extrabold uppercase tracking-wider text-blue-400 bg-blue-650/10 px-2 py-0.5 rounded-full border border-blue-500/20">
+                        By {notif.teacher.name}
+                      </span>
+                    </div>
+                    <div className="flex justify-between items-start gap-2">
+                      <h4 className="font-bold text-white text-sm leading-tight">{notif.title}</h4>
+                      <span className="text-[10px] text-slate-500 flex items-center gap-1 shrink-0 mt-0.5">
+                        <Clock className="h-3 w-3" />
+                        {new Date(notif.publishDate).toLocaleDateString([], { month: "short", day: "numeric" })}
+                      </span>
+                    </div>
+                    <p className="text-xs text-slate-400 leading-relaxed whitespace-pre-line">{notif.description}</p>
                   </div>
-                  <p className="text-xs text-slate-400 leading-relaxed">{notif.content}</p>
+                ))
+              ) : (
+                <div className="text-center py-6 text-slate-500 text-sm">
+                  No announcements for your children at this time.
                 </div>
-              ))}
+              )}
             </div>
           </div>
         </div>
       )}
     </div>
+    </ParentDashboardClient>
   );
 }

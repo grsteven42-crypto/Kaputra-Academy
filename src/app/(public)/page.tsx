@@ -1,15 +1,78 @@
 "use client";
 
-import { motion } from "framer-motion";
+import { useState, useEffect, useCallback } from "react";
+import Image from "next/image"
+import { motion, AnimatePresence } from "framer-motion";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
-import { Star, Quote, Award, Users, Sparkles, ArrowRight, BookOpen, Clock3, FlaskConical, Trophy } from "lucide-react";
+import { Star, Quote, Award, Users, Sparkles, ArrowRight, BookOpen, Clock3, FlaskConical, Trophy, ChevronLeft, ChevronRight, Medal } from "lucide-react";
+import useEmblaCarousel from "embla-carousel-react";
+import { getContentBlocks } from "@/actions/cms";
 
 export default function Home() {
+  const [emblaRef, emblaApi] = useEmblaCarousel({
+    loop: true,
+    align: "start",
+    slidesToScroll: 1,
+  });
+
+  const scrollPrev = useCallback(() => {
+    if (emblaApi) emblaApi.scrollPrev();
+  }, [emblaApi]);
+
+  const scrollNext = useCallback(() => {
+    if (emblaApi) emblaApi.scrollNext();
+  }, [emblaApi]);
+
+  useEffect(() => {
+    if (!emblaApi) return;
+    const intervalId = setInterval(() => {
+      emblaApi.scrollNext();
+    }, 5000);
+    return () => clearInterval(intervalId);
+  }, [emblaApi]);
+
+  // CMS state
+  const [heroSlides, setHeroSlides] = useState<any[]>([]);
+  const [aboutBlock, setAboutBlock] = useState<any>(null);
+  const [contactBlock, setContactBlock] = useState<any>(null);
+  const [currentSlideIndex, setCurrentSlideIndex] = useState(0);
+
+  useEffect(() => {
+    async function loadCmsData() {
+      try {
+        const res = await getContentBlocks();
+        if (res.success && res.blocks) {
+          const hero = res.blocks.find((b: any) => b.section === "hero_slider");
+          if (hero) setHeroSlides(JSON.parse(hero.content));
+
+          const about = res.blocks.find((b: any) => b.section === "about_us");
+          if (about) setAboutBlock(JSON.parse(about.content));
+
+          const contact = res.blocks.find((b: any) => b.section === "contact_info");
+          if (contact) setContactBlock(JSON.parse(contact.content));
+        }
+      } catch (e) {
+        console.error("Failed to load CMS homepage data:", e);
+      }
+    }
+    loadCmsData();
+  }, []);
+
+  useEffect(() => {
+    if (heroSlides.length <= 1) return;
+    const timer = setInterval(() => {
+      setCurrentSlideIndex((prev) => (prev + 1) % heroSlides.length);
+    }, 6000);
+    return () => clearInterval(timer);
+  }, [heroSlides]);
+
+  const currentSlide = heroSlides.length > 0 ? heroSlides[currentSlideIndex] : null;
+
   return (
     <div className="w-full overflow-hidden">
       {/* Hero Section */}
-      <section className="relative w-full min-h-[90vh] flex items-center justify-center bg-white overflow-hidden border-b border-slate-100">
+      <section className="relative w-full min-h-[90vh] flex items-center justify-center bg-white overflow-hidden border-b border-slate-100 pt-16 md:pt-0">
         <div className="absolute top-24 left-12 grid grid-cols-3 gap-3 opacity-20">
           {[...Array(9)].map((_, i) => (
             <div key={i} className="w-2 h-2 rounded-full bg-[#F4B218]" />
@@ -61,75 +124,66 @@ export default function Home() {
                 Singapore Curriculum
               </p>
               <p className="text-sm text-slate-500">
-                K2 – Grade 9
+                Grade 1 – Grade 9
               </p>
             </div>
           </motion.div>
 
-          {/* Badge */}
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.6 }}
-            className="inline-flex items-center gap-2 bg-[#F4B218]/10 text-[#0A2458] px-5 py-2 rounded-full text-sm font-semibold mb-8"
-          >
-            <Sparkles className="w-4 h-4" />
-            Singapore Curriculum Learning Center
-          </motion.div>
+          <AnimatePresence mode="wait">
+            <motion.div
+              key={currentSlideIndex}
+              initial={{ opacity: 0, y: 15 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -15 }}
+              transition={{ duration: 0.5 }}
+            >
+              {/* Badge */}
+              <div className="inline-flex items-center gap-2 bg-[#F4B218]/10 text-[#0A2458] px-5 py-2 rounded-full text-sm font-semibold mb-8">
+                <Sparkles className="w-4 h-4 text-[#F4B218]" />
+                Singapore Curriculum Learning Center
+              </div>
 
-          {/* Heading */}
-          <motion.div
-            initial={{ opacity: 0, y: 30 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.8 }}
-          >
-            <h1 className="text-5xl md:text-7xl font-extrabold text-slate-900 tracking-tight mb-6">
-              Empowering Students To Achieve
-              <br />
-              <span className="text-transparent bg-clip-text bg-gradient-to-r from-[#0A2458] to-[#F4B218]">
-                International Excellence
-              </span>
-            </h1>
-          </motion.div>
+              {/* Heading */}
+              <h1 className="text-5xl md:text-7xl font-extrabold text-slate-900 tracking-tight mb-6">
+                {currentSlide ? currentSlide.title : (
+                  <>
+                    Empowering Students To Achieve
+                    <br />
+                    <span className="text-transparent bg-clip-text bg-gradient-to-r from-[#0A2458] to-[#F4B218]">
+                      International Excellence
+                    </span>
+                  </>
+                )}
+              </h1>
 
-          {/* Description */}
-          <motion.p
-            initial={{ opacity: 0, y: 30 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.8, delay: 0.2 }}
-            className="text-lg md:text-xl text-slate-600 max-w-3xl mx-auto mb-10 leading-relaxed"
-          >
-            Through the Singapore Curriculum, interactive learning experiences,
-            and competition preparation programs, we help students develop
-            confidence, critical thinking, and academic excellence.
-          </motion.p>
+              {/* Description */}
+              <p className="text-lg md:text-xl text-slate-650 max-w-3xl mx-auto mb-10 leading-relaxed">
+                {currentSlide ? currentSlide.subtitle : "Through the Singapore Curriculum, interactive learning experiences, and competition preparation programs, we help students develop confidence, critical thinking, and academic excellence."}
+              </p>
 
-          {/* Buttons */}
-          <motion.div
-            initial={{ opacity: 0, y: 30 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.8, delay: 0.4 }}
-            className="flex flex-col sm:flex-row items-center justify-center gap-4"
-          >
-            <Link href="/catalog">
-              <Button
-                size="lg"
-                className="h-14 px-8 text-lg rounded-full bg-[#F4B218] hover:bg-[#d99c0d] text-slate-900 font-semibold shadow-lg"
-              >
-                Explore Programs
-              </Button>
-            </Link>
+              {/* Buttons */}
+              <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
+                <Link href={currentSlide ? currentSlide.buttonLink : "/catalog"}>
+                  <Button
+                    size="lg"
+                    className="h-14 px-8 text-lg rounded-full bg-[#F4B218] hover:bg-[#d99c0d] text-slate-900 font-semibold shadow-lg transition-transform hover:scale-105 active:scale-95"
+                  >
+                    {currentSlide ? currentSlide.buttonText : "Explore Programs"}
+                  </Button>
+                </Link>
 
-            <Link href="/about">
-              <Button
-                size="lg"
-                variant="outline"
-                className="h-14 px-8 text-lg rounded-full"
-              >
-                Learn More
-              </Button>
-            </Link>
-          </motion.div>
+                <Link href="/faq">
+                  <Button
+                    size="lg"
+                    variant="outline"
+                    className="h-14 px-8 text-lg rounded-full transition-transform hover:scale-105 active:scale-95"
+                  >
+                    FAQ
+                  </Button>
+                </Link>
+              </div>
+            </motion.div>
+          </AnimatePresence>
 
           {/* Stats */}
           <motion.div
@@ -149,7 +203,7 @@ export default function Home() {
 
             <div>
               <h3 className="text-3xl font-bold text-[#0A2458]">
-                K2–G9
+                G1 – G9
               </h3>
               <p className="text-slate-500 text-sm">
                 Student Levels
@@ -240,12 +294,12 @@ export default function Home() {
                   About Kaputra Academy
                 </span>
                 <h2 className="mt-4 text-3xl md:text-5xl font-bold text-slate-900 leading-tight tracking-tight">
-                  Nurturing Thinkers, Leaders, and Achievers
+                  {aboutBlock?.title || "Nurturing Thinkers, Leaders, and Achievers"}
                 </h2>
               </div>
 
-              <p className="text-lg text-slate-600 leading-relaxed">
-                Kaputra Academy is a learning center that focuses on helping students achieve academic excellence throught the Singapore Curriculum and international competition preparation.
+              <p className="text-lg text-slate-650 leading-relaxed">
+                {aboutBlock?.description || "Kaputra Academy is a learning center that focuses on helping students achieve academic excellence throught the Singapore Curriculum and international competition preparation."}
               </p>
 
               {/* Highlights List */}
@@ -255,8 +309,10 @@ export default function Home() {
                     <Award className="w-3.5 h-3.5 text-[#F4B218]" />
                   </div>
                   <div>
-                    <h4 className="font-semibold text-slate-900">Proven Pedagogy</h4>
-                    <p className="text-sm text-slate-500">Proven track record of building problem-solving skills.</p>
+                    <h4 className="font-semibold text-slate-900">Our Vision</h4>
+                    <p className="text-sm text-slate-500">
+                      {aboutBlock?.vision || "To be the leading learning center for nurturing mathematical and scientific curiosity in children."}
+                    </p>
                   </div>
                 </div>
 
@@ -265,8 +321,10 @@ export default function Home() {
                     <Trophy className="w-3.5 h-3.5 text-[#F4B218]" />
                   </div>
                   <div>
-                    <h4 className="font-semibold text-slate-900">Competition Training</h4>
-                    <p className="text-sm text-slate-500">Focused coaching for international competitions.</p>
+                    <h4 className="font-semibold text-slate-900">Our Mission</h4>
+                    <p className="text-sm text-slate-500">
+                      {aboutBlock?.mission || "Empowering students through structured learning, premium mentoring, and fostering a growth mindset."}
+                    </p>
                   </div>
                 </div>
               </div>
@@ -284,6 +342,312 @@ export default function Home() {
               </div>
             </motion.div>
 
+          </div>
+        </div>
+      </section>
+
+      {/* Achievements Section */}
+      <section className="py-24 bg-gradient-to-b from-white to-slate-50 relative overflow-hidden">
+        {/* Background blobs for premium depth */}
+        <div className="absolute top-1/4 right-0 w-80 h-80 bg-[#F4B218]/5 rounded-full blur-[80px] pointer-events-none" />
+        <div className="absolute bottom-1/4 left-0 w-80 h-80 bg-blue-500/5 rounded-full blur-[80px] pointer-events-none" />
+
+        <div className="container mx-auto px-4">
+          {/* Header Row */}
+          <div className="flex flex-col md:flex-row md:items-end justify-between mb-12 gap-6">
+            <div className="max-w-2xl">
+              <span className="text-sm font-semibold uppercase tracking-wider text-[#F4B218] bg-[#F4B218]/10 px-4 py-2 rounded-full">
+                Excellence in Action
+              </span>
+              <h2 className="mt-4 text-3xl md:text-5xl font-bold text-slate-900 tracking-tight">
+                Our Student Achievements
+              </h2>
+              <p className="mt-4 text-lg text-slate-600">
+                Celebrating the outstanding accomplishments of our students in prestigious local and international competitions.
+              </p>
+            </div>
+            {/* Navigation Buttons */}
+            <div className="flex items-center gap-3 self-start md:self-end">
+              <button
+                onClick={scrollPrev}
+                className="w-12 h-12 rounded-full border border-slate-200 bg-white flex items-center justify-center text-slate-700 hover:bg-slate-50 hover:border-slate-300 hover:text-slate-900 transition-all shadow-sm hover:shadow active:scale-95"
+                aria-label="Previous slide"
+              >
+                <ChevronLeft className="w-5 h-5" />
+              </button>
+              <button
+                onClick={scrollNext}
+                className="w-12 h-12 rounded-full border border-slate-200 bg-white flex items-center justify-center text-slate-700 hover:bg-slate-50 hover:border-slate-300 hover:text-slate-900 transition-all shadow-sm hover:shadow active:scale-95"
+                aria-label="Next slide"
+              >
+                <ChevronRight className="w-5 h-5" />
+              </button>
+            </div>
+          </div>
+
+          {/* Embla Carousel Viewport */}
+          <div className="overflow-hidden cursor-grab active:cursor-grabbing" ref={emblaRef}>
+            <div className="flex -ml-6">
+              {/* Slide 1 */}
+              <div className="flex-[0_0_100%] md:flex-[0_0_50%] lg:flex-[0_0_33.333%] min-w-0 pl-6">
+                <motion.div
+                  whileHover={{ y: -6 }}
+                  className="h-full bg-white rounded-3xl border border-slate-100 shadow-sm hover:shadow-xl transition-all duration-300 flex flex-col overflow-hidden group"
+                >
+                  {/* Local Image Container */}
+                  <div className="p-6 pb-0">
+                    <div className="relative w-full h-52 rounded-2xl overflow-hidden">
+                      <Image
+                        src="/achievement1.png"
+                        alt="Bryan Tjandra - SASMO Gold Medalist"
+                        fill
+                        className="object-cover group-hover:scale-105 transition-transform duration-500"
+                      />
+
+                      <span className="absolute top-4 left-4 inline-block text-xs font-bold uppercase tracking-wider text-[#F4B218] bg-slate-950/80 backdrop-blur-md px-3 py-1 rounded-full border border-[#F4B218]/30 shadow-lg">
+                        SASMO 2025 • Gold Medal
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Body Content */}
+                  <div className="p-6 flex flex-col justify-between flex-1">
+                    <div>
+                      <div className="flex items-center gap-3 mb-4">
+                        <div className="w-10 h-10 rounded-xl bg-[#F4B218]/10 flex items-center justify-center text-[#F4B218] group-hover:scale-110 transition-transform duration-300">
+                          <Trophy className="w-5 h-5" />
+                        </div>
+                        <h3 className="text-lg font-bold text-slate-900 group-hover:text-blue-900 transition-colors">
+                          Perfect Score & Gold Award
+                        </h3>
+                      </div>
+
+                      <p className="text-slate-600 text-sm leading-relaxed mb-6">
+                        Bryan achieved an outstanding perfect score, competing against thousands of students across Asia in the Singapore and Asian Schools Math Olympiad.
+                      </p>
+                    </div>
+
+                    <div className="pt-4 border-t border-slate-100 flex items-center justify-between">
+                      <div>
+                        <p className="font-bold text-slate-900 text-sm">Bryan Tjandra</p>
+                        <p className="text-xs text-slate-500">Primary 5 Student</p>
+                      </div>
+                      <div className="text-xs font-semibold text-slate-400 bg-slate-50 px-2.5 py-1 rounded-md">
+                        East Java
+                      </div>
+                    </div>
+                  </div>
+                </motion.div>
+              </div>
+
+              {/* Slide 2 */}
+              <div className="flex-[0_0_100%] md:flex-[0_0_50%] lg:flex-[0_0_33.333%] min-w-0 pl-6">
+                <motion.div
+                  whileHover={{ y: -6 }}
+                  className="h-full bg-white rounded-3xl border border-slate-100 shadow-sm hover:shadow-xl transition-all duration-300 flex flex-col overflow-hidden group"
+                >
+                  {/* Local Image Container */}
+                  <div className="p-6 pb-0">
+                    <div className="relative w-full h-52 rounded-2xl overflow-hidden">
+                      <Image
+                        src="/achievement2.png"
+                        alt="Bryan Tjandra - SASMO Gold Medalist"
+                        fill
+                        className="object-cover group-hover:scale-105 transition-transform duration-500"
+                      />
+
+                      <span className="absolute top-4 left-4 inline-block text-xs font-bold uppercase tracking-wider text-[#F4B218] bg-slate-950/80 backdrop-blur-md px-3 py-1 rounded-full border border-[#F4B218]/30 shadow-lg">
+                        SASMO 2025 • Gold Medal
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Body Content */}
+                  <div className="p-6 flex flex-col justify-between flex-1">
+                    <div>
+                      <div className="flex items-center gap-3 mb-4">
+                        <div className="w-10 h-10 rounded-xl bg-blue-500/10 flex items-center justify-center text-blue-600 group-hover:scale-110 transition-transform duration-300">
+                          <Award className="w-5 h-5" />
+                        </div>
+                        <h3 className="text-lg font-bold text-slate-900 group-hover:text-blue-900 transition-colors">
+                          Ranked 1st National
+                        </h3>
+                      </div>
+
+                      <p className="text-slate-600 text-sm leading-relaxed mb-6">
+                        Catherine secured the 1st national rank in the American Mathematics Olympiad (AMO) 2024, demonstrating top-tier logical reasoning.
+                      </p>
+                    </div>
+
+                    <div className="pt-4 border-t border-slate-100 flex items-center justify-between">
+                      <div>
+                        <p className="font-bold text-slate-900 text-sm">Catherine Wijaya</p>
+                        <p className="text-xs text-slate-500">Secondary 2 Student</p>
+                      </div>
+                      <div className="text-xs font-semibold text-slate-400 bg-slate-50 px-2.5 py-1 rounded-md">
+                        Surabaya
+                      </div>
+                    </div>
+                  </div>
+                </motion.div>
+              </div>
+
+              {/* Slide 3 */}
+              <div className="flex-[0_0_100%] md:flex-[0_0_50%] lg:flex-[0_0_33.333%] min-w-0 pl-6">
+                <motion.div
+                  whileHover={{ y: -6 }}
+                  className="h-full bg-white rounded-3xl border border-slate-100 shadow-sm hover:shadow-xl transition-all duration-300 flex flex-col overflow-hidden group"
+                >
+                  {/* Local Image Container */}
+                  <div className="p-6 pb-0">
+                    <div className="relative w-full h-52 rounded-2xl overflow-hidden">
+                      <Image
+                        src="/achievement1.png"
+                        alt="Bryan Tjandra - SASMO Gold Medalist"
+                        fill
+                        className="object-cover group-hover:scale-105 transition-transform duration-500"
+                      />
+
+                      <span className="absolute top-4 left-4 inline-block text-xs font-bold uppercase tracking-wider text-[#F4B218] bg-slate-950/80 backdrop-blur-md px-3 py-1 rounded-full border border-[#F4B218]/30 shadow-lg">
+                        SASMO 2025 • Gold Medal
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Body Content */}
+                  <div className="p-6 flex flex-col justify-between flex-1">
+                    <div>
+                      <div className="flex items-center gap-3 mb-4">
+                        <div className="w-10 h-10 rounded-xl bg-purple-500/10 flex items-center justify-center text-purple-600 group-hover:scale-110 transition-transform duration-300">
+                          <Star className="w-5 h-5" />
+                        </div>
+                        <h3 className="text-lg font-bold text-slate-900 group-hover:text-blue-900 transition-colors">
+                          Seoul Finals Gold
+                        </h3>
+                      </div>
+
+                      <p className="text-slate-600 text-sm leading-relaxed mb-6">
+                        Darren traveled to Seoul, South Korea, for the World Mathematics Invitational (WMI) Final Round, winning a Gold Award for his outstanding math prowess.
+                      </p>
+                    </div>
+
+                    <div className="pt-4 border-t border-slate-100 flex items-center justify-between">
+                      <div>
+                        <p className="font-bold text-slate-900 text-sm">Darren Limanto</p>
+                        <p className="text-xs text-slate-500">Primary 6 Student</p>
+                      </div>
+                      <div className="text-xs font-semibold text-slate-400 bg-slate-50 px-2.5 py-1 rounded-md">
+                        Sidoarjo
+                      </div>
+                    </div>
+                  </div>
+                </motion.div>
+              </div>
+
+              {/* Slide 4 */}
+              <div className="flex-[0_0_100%] md:flex-[0_0_50%] lg:flex-[0_0_33.333%] min-w-0 pl-6">
+                <motion.div
+                  whileHover={{ y: -6 }}
+                  className="h-full bg-white rounded-3xl border border-slate-100 shadow-sm hover:shadow-xl transition-all duration-300 flex flex-col overflow-hidden group"
+                >
+                  {/* Local Image Container */}
+                  <div className="p-6 pb-0">
+                    <div className="relative w-full h-52 rounded-2xl overflow-hidden">
+                      <Image
+                        src="/achievement1.png"
+                        alt="Bryan Tjandra - SASMO Gold Medalist"
+                        fill
+                        className="object-cover group-hover:scale-105 transition-transform duration-500"
+                      />
+
+                      <span className="absolute top-4 left-4 inline-block text-xs font-bold uppercase tracking-wider text-[#F4B218] bg-slate-950/80 backdrop-blur-md px-3 py-1 rounded-full border border-[#F4B218]/30 shadow-lg">
+                        SASMO 2025 • Gold Medal
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Body Content */}
+                  <div className="p-6 flex flex-col justify-between flex-1">
+                    <div>
+                      <div className="flex items-center gap-3 mb-4">
+                        <div className="w-10 h-10 rounded-xl bg-amber-500/10 flex items-center justify-center text-amber-600 group-hover:scale-110 transition-transform duration-300">
+                          <Medal className="w-5 h-5" />
+                        </div>
+                        <h3 className="text-lg font-bold text-slate-900 group-hover:text-blue-900 transition-colors">
+                          National Science Olympiad
+                        </h3>
+                      </div>
+
+                      <p className="text-slate-600 text-sm leading-relaxed mb-6">
+                        Eliana was selected to represent East Java in the National Science Olympiad (OSN) 2025, winning a prestigious Bronze Medal in Mathematics.
+                      </p>
+                    </div>
+
+                    <div className="pt-4 border-t border-slate-100 flex items-center justify-between">
+                      <div>
+                        <p className="font-bold text-slate-900 text-sm">Eliana Sutedjo</p>
+                        <p className="text-xs text-slate-500">Secondary 3 Student</p>
+                      </div>
+                      <div className="text-xs font-semibold text-slate-400 bg-slate-50 px-2.5 py-1 rounded-md">
+                        Surabaya
+                      </div>
+                    </div>
+                  </div>
+                </motion.div>
+              </div>
+
+              {/* Slide 5 */}
+              <div className="flex-[0_0_100%] md:flex-[0_0_50%] lg:flex-[0_0_33.333%] min-w-0 pl-6">
+                <motion.div
+                  whileHover={{ y: -6 }}
+                  className="h-full bg-white rounded-3xl border border-slate-100 shadow-sm hover:shadow-xl transition-all duration-300 flex flex-col overflow-hidden group"
+                >
+                  {/* Local Image Container */}
+                  <div className="p-6 pb-0">
+                    <div className="relative w-full h-52 rounded-2xl overflow-hidden">
+                      <Image
+                        src="/achievement1.png"
+                        alt="Bryan Tjandra - SASMO Gold Medalist"
+                        fill
+                        className="object-cover group-hover:scale-105 transition-transform duration-500"
+                      />
+                      <span className="absolute top-4 left-4 inline-block text-xs font-bold uppercase tracking-wider text-[#F4B218] bg-slate-950/80 backdrop-blur-md px-3 py-1 rounded-full border border-[#F4B218]/30 shadow-lg">
+                        SASMO 2025 • Gold Medal
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Body Content */}
+                  <div className="p-6 flex flex-col justify-between flex-1">
+                    <div>
+                      <div className="flex items-center gap-3 mb-4">
+                        <div className="w-10 h-10 rounded-xl bg-teal-500/10 flex items-center justify-center text-teal-600 group-hover:scale-110 transition-transform duration-300">
+                          <Sparkles className="w-5 h-5" />
+                        </div>
+                        <h3 className="text-lg font-bold text-slate-900 group-hover:text-blue-900 transition-colors">
+                          Top 1% Globally
+                        </h3>
+                      </div>
+
+                      <p className="text-slate-600 text-sm leading-relaxed mb-6">
+                        Felix achieved a High Distinction in ICAS Mathematics, placing him in the top 1% of participants worldwide in this global UNSW assessment.
+                      </p>
+                    </div>
+
+                    <div className="pt-4 border-t border-slate-100 flex items-center justify-between">
+                      <div>
+                        <p className="font-bold text-slate-900 text-sm">Felix Anderson</p>
+                        <p className="text-xs text-slate-500">Primary 4 Student</p>
+                      </div>
+                      <div className="text-xs font-semibold text-slate-400 bg-slate-50 px-2.5 py-1 rounded-md">
+                        Gresik
+                      </div>
+                    </div>
+                  </div>
+                </motion.div>
+              </div>
+
+            </div>
           </div>
         </div>
       </section>
@@ -565,7 +929,7 @@ export default function Home() {
               <div className="p-8 space-y-4">
                 <div className="flex justify-between border-b pb-3">
                   <span className="text-slate-600">Level</span>
-                  <span className="font-semibold">K2 - Grade 9</span>
+                  <span className="font-semibold">Grade 1 - Grade 9</span>
                 </div>
 
                 <div className="flex justify-between border-b pb-3">
@@ -581,6 +945,7 @@ export default function Home() {
                 </div>
 
                 <ul className="space-y-2 text-sm text-slate-600 pt-2">
+                  <li>✓ 1 Free Trial Session Included</li>
                   <li>✓ International Competition Preparation</li>
                   <li>✓ Singapore Curriculum</li>
                   <li>✓ Problem Solving Focus</li>
@@ -598,8 +963,14 @@ export default function Home() {
             {/* Regular Class */}
             <motion.div
               whileHover={{ y: -8 }}
-              className="bg-white rounded-3xl overflow-hidden shadow-lg border border-slate-100 transition-all"
+              className="relative bg-white rounded-3xl shadow-lg border border-slate-100 transition-all"
             >
+              {/* Creative Floating Badge */}
+              <div className="absolute -top-4 right-6 bg-gradient-to-r from-[#F4B218] to-amber-500 text-slate-950 text-xs font-bold uppercase tracking-wider px-4 py-1.5 rounded-full shadow-lg flex items-center gap-1 border border-white/20 z-10">
+                <Sparkles className="w-3 h-3 fill-slate-950" />
+                Free Trial Available
+              </div>
+
               <div className="bg-[#F4B218] text-slate-900 p-8">
                 <span className="text-sm font-semibold uppercase tracking-wider">
                   Semi Private
@@ -617,7 +988,7 @@ export default function Home() {
               <div className="p-8 space-y-4">
                 <div className="flex justify-between border-b pb-3">
                   <span className="text-slate-600">Level</span>
-                  <span className="font-semibold">K2 - Grade 9</span>
+                  <span className="font-semibold">Grade 1 - Grade 9</span>
                 </div>
 
                 <div className="flex justify-between border-b pb-3">
@@ -633,6 +1004,7 @@ export default function Home() {
                 </div>
 
                 <ul className="space-y-2 text-sm text-slate-600 pt-2">
+                  <li>✓ 1 Free Trial Session Included</li>
                   <li>✓ Singapore Curriculum</li>
                   <li>✓ Academic Foundation Building</li>
                   <li>✓ Interactive Learning Activities</li>

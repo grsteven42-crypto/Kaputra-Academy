@@ -1,95 +1,122 @@
-import prisma from "@/lib/db";
 import { submitRegistration } from "@/actions/register";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { CheckCircle2, Mail, ShieldCheck, ArrowRight } from "lucide-react";
+import Link from "next/link";
 
 export const metadata = {
   title: "Register | Kaputra Academy",
 };
 
-export default async function RegisterPage() {
-  // Ensure we have at least one course for demonstration purposes
-  let courses = await prisma.course.findMany({
-    where: { isPublished: true },
-  });
+interface SearchParams {
+  success?: string;
+  studentId?: string;
+}
 
-  if (courses.length === 0) {
-    // Seed a dummy category and course if none exist
-    const category = await prisma.category.upsert({
-      where: { slug: "tech" },
-      update: {},
-      create: { name: "Technology", slug: "tech", description: "Tech courses" },
-    });
+export default async function RegisterPage({
+  searchParams,
+}: {
+  searchParams: Promise<SearchParams>;
+}) {
+  const { success, studentId } = await searchParams;
 
-    await prisma.course.upsert({
-      where: { slug: "full-stack-web" },
-      update: {},
-      create: {
-        title: "Full Stack Web Development",
-        slug: "full-stack-web",
-        shortDescription: "Learn to build modern web applications.",
-        fullDescription: "Complete full stack course.",
-        objectives: "Master React and Node.js",
-        learningOutcomes: "Build 5 real world apps",
-        schedule: "Mon-Wed-Fri",
-        price: 5000000,
-        registrationFee: 250000,
-        categoryId: category.id,
-        isPublished: true,
-      },
-    });
+  if (success === "true") {
+    return (
+      <main className="min-h-screen bg-gray-50 flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8">
+        <div className="max-w-md w-full bg-white shadow-2xl rounded-3xl p-8 border border-gray-100 text-center space-y-6">
+          <div className="flex justify-center">
+            <div className="p-4 bg-emerald-50 rounded-full">
+              <CheckCircle2 className="w-16 h-16 text-emerald-500" />
+            </div>
+          </div>
+          <div className="space-y-2">
+            <h2 className="text-3xl font-extrabold text-[#072147]">
+              Registration Complete!
+            </h2>
+            <p className="text-sm text-gray-500">
+              Your student account has been created successfully.
+            </p>
+          </div>
 
-    courses = await prisma.course.findMany({
-      where: { isPublished: true },
-    });
+          <div className="bg-slate-50 p-6 rounded-2xl border border-gray-100 text-left space-y-3">
+            <div className="flex justify-between items-center pb-2 border-b border-gray-200">
+              <span className="text-xs text-gray-400 font-semibold uppercase tracking-wider">Student ID</span>
+              <span className="font-mono font-bold text-[#CA8E25] text-lg">{studentId}</span>
+            </div>
+            <p className="text-sm text-gray-600 leading-relaxed">
+              An activation email containing your **Student ID** and an **Activation Link** has been sent to your parent's email address.
+            </p>
+            <p className="text-xs text-gray-400 italic">
+              Please check the terminal/console to view the simulated email and activate your account.
+            </p>
+          </div>
+
+          <div className="pt-4 space-y-3">
+            <Link href={`/activate?studentId=${studentId}`}>
+              <Button className="w-full bg-[#CA8E25] hover:bg-[#D89A2B] text-black font-bold py-3.5 rounded-xl shadow-lg flex items-center justify-center gap-2">
+                Go to Activation Link <ArrowRight className="h-4 w-4" />
+              </Button>
+            </Link>
+            <Link href="/login" className="block text-sm text-slate-500 hover:text-slate-800 transition">
+              Back to Login
+            </Link>
+          </div>
+        </div>
+      </main>
+    );
   }
 
   return (
     <main className="min-h-screen bg-gray-50 flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8">
       <div className="max-w-2xl w-full bg-white shadow-xl rounded-2xl p-8 border border-gray-100">
         <div className="text-center mb-8">
+          <span className="text-2xl font-black tracking-wide text-[#072147] block">
+            KAPUTRA
+          </span>
+          <span className="text-xs font-semibold tracking-[0.2em] text-[#CA8E25] uppercase block mb-3">
+            Academy
+          </span>
           <h2 className="text-3xl font-extrabold text-[#072147]">
-            Academy Registration
+            Account Registration
           </h2>
-          <p className="mt-2 text-sm text-gray-600">
-            Please fill out the details below to enroll.
-          </p>
         </div>
 
         <form action={submitRegistration} className="space-y-6">
+
+          {/* Student Info */}
           <div className="bg-gray-50 p-6 rounded-xl border border-gray-100">
             <h3 className="text-lg font-semibold text-[#072147] mb-4">
               Student Information
             </h3>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label htmlFor="studentName">Full Name</Label>
+                <Label htmlFor="studentName">Student's Full Name</Label>
                 <Input
                   id="studentName"
                   name="studentName"
                   required
-                  placeholder="John Doe"
-                  className="w-full"
+                  placeholder="Full Name"
+                  className="w-full bg-white rounded-xl focus-visible:ring-[#CA8E25] placeholder: italic"
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="studentAge">Age</Label>
+                <Label htmlFor="dateOfBirth">Date of Birth</Label>
                 <Input
-                  id="studentAge"
-                  name="studentAge"
-                  type="number"
+                  id="dateOfBirth"
+                  name="dateOfBirth"
+                  type="date"
                   required
-                  placeholder="18"
-                  className="w-full"
+                  className="w-full bg-white rounded-xl focus-visible:ring-[#CA8E25]"
                 />
               </div>
             </div>
           </div>
 
+          {/* Parent Info */}
           <div className="bg-gray-50 p-6 rounded-xl border border-gray-100">
             <h3 className="text-lg font-semibold text-[#072147] mb-4">
-              Parent/Guardian Information
+              Parent Information
             </h3>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="space-y-2 md:col-span-2">
@@ -98,55 +125,31 @@ export default async function RegisterPage() {
                   id="parentName"
                   name="parentName"
                   required
-                  placeholder="Jane Doe"
-                  className="w-full"
+                  placeholder="Full Name"
+                  className="w-full bg-white rounded-xl focus-visible:ring-[#CA8E25] placeholder: italic"
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="parentPhone">Phone Number</Label>
+                <Label htmlFor="parentPhone">Parent Phone Number</Label>
                 <Input
                   id="parentPhone"
                   name="parentPhone"
                   required
-                  placeholder="+62 812..."
-                  className="w-full"
+                  placeholder="Enter Phone Number"
+                  className="w-full bg-white rounded-xl focus-visible:ring-[#CA8E25] placeholder: italic"
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="parentEmail">Email Address</Label>
+                <Label htmlFor="parentEmail">Parent Email Address</Label>
                 <Input
                   id="parentEmail"
                   name="parentEmail"
                   type="email"
                   required
-                  placeholder="jane@example.com"
-                  className="w-full"
+                  placeholder="Enter Email"
+                  className="w-full bg-white rounded-xl focus-visible:ring-[#CA8E25] placeholder: italic"
                 />
               </div>
-            </div>
-          </div>
-
-          <div className="bg-gray-50 p-6 rounded-xl border border-gray-100">
-            <h3 className="text-lg font-semibold text-[#072147] mb-4">
-              Program Selection
-            </h3>
-            <div className="space-y-2">
-              <Label htmlFor="courseId">Selected Program</Label>
-              <select
-                id="courseId"
-                name="courseId"
-                required
-                className="flex h-10 w-full items-center justify-between rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                <option value="" disabled selected>
-                  Select a program...
-                </option>
-                {courses.map((course) => (
-                  <option key={course.id} value={course.id}>
-                    {course.title} - Rp {course.price.toLocaleString("id-ID")}
-                  </option>
-                ))}
-              </select>
             </div>
           </div>
 
@@ -154,8 +157,15 @@ export default async function RegisterPage() {
             type="submit"
             className="w-full bg-[#CA8E25] hover:bg-[#D89A2B] text-black font-bold py-3 rounded-xl shadow-lg transition-all text-lg"
           >
-            Submit Registration
+            Register Account
           </Button>
+
+          <div className="text-center text-sm text-gray-500">
+            Already have an account?{" "}
+            <Link href="/login" className="text-[#CA8E25] font-semibold hover:underline">
+              Log In
+            </Link>
+          </div>
         </form>
       </div>
     </main>

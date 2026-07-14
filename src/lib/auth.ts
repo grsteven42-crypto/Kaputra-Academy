@@ -8,7 +8,7 @@ export const authOptions: NextAuthOptions = {
     CredentialsProvider({
       name: "Credentials",
       credentials: {
-        username: { label: "Email or Student ID", type: "text" },
+        username: { label: "Student ID or Email", type: "text" },
         password: { label: "Password", type: "password" }
       },
       async authorize(credentials) {
@@ -28,6 +28,17 @@ export const authOptions: NextAuthOptions = {
 
         if (!user) {
           return null;
+        }
+
+        // Enforce Student ID and Active account rules for students
+        if (user.role === "STUDENT") {
+          // Students must log in using Student ID, not email
+          if (credentials.username.includes("@")) {
+            return null;
+          }
+          if (!user.isActive) {
+            return null;
+          }
         }
 
         const isValid = await bcrypt.compare(credentials.password, user.passwordHash);

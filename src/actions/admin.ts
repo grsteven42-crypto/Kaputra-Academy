@@ -1,59 +1,142 @@
 "use server";
 
 import prisma from "@/lib/db";
-import { generateStudentId, generatePlacementTestCode } from "@/lib/idGenerator";
-import { sendWelcomeEmail } from "@/lib/email";
+import { generatePlacementTestCode } from "@/lib/idGenerator";
+import { sendEnrollmentConfirmationEmail } from "@/lib/email";
 import { revalidatePath } from "next/cache";
 
 export async function approveRegistration(registrationId: string) {
   try {
     const registration = await prisma.registration.findUnique({
       where: { id: registrationId },
-      include: { course: true },
+      include: { course: true, payment: true },
     });
 
     if (!registration) {
       throw new Error("Registration not found");
     }
 
-    if (registration.status === "APPROVED") {
-      throw new Error("Registration is already approved");
+    // Find Student User
+    const parentUser = await prisma.user.findUnique({
+      where: { email: registration.parentEmail },
+    });
+
+    const studentUser = parentUser
+      ? await prisma.user.findFirst({
+          where: { parentId: parentUser.id, name: registration.studentName },
+        })
+      : null;
+
+    if (!studentUser) {
+      throw new Error("Student account associated with this registration not found");
     }
 
-    // 1. Generate unique Student ID
-    const studentId = await generateStudentId();
+    const studentIdStr = studentUser.studentIdStr || "STUDENT_ID";
 
-    // 2. Generate unique Placement Test Code
-    const testCode = await generatePlacementTestCode();
+    if (registration.status === "VERIFYING_PT_PAYMENT") {
+      // 1. Placement Test Fee Paid -> Unlock Test
+      const testCode = await generatePlacementTestCode();
 
-    // 3. Create Placement Test record
-    await prisma.placementTest.create({
-      data: {
-        registrationId: registration.id,
-        studentIdStr: studentId,
-        testCode: testCode,
-        status: "NOT_STARTED",
-      },
-    });
+      // Create Placement Test
+      await prisma.placementTest.create({
+        data: {
+          registrationId: registration.id,
+          studentIdStr: studentIdStr,
+          testCode: testCode,
+          status: "NOT_STARTED",
+        },
+      });
 
-    // 4. Update Registration Status
-    await prisma.registration.update({
-      where: { id: registration.id },
-      data: { status: "APPROVED" },
-    });
+      // Update payment and registration status
+      if (registration.payment) {
+        await prisma.payment.update({
+          where: { id: registration.payment.id },
+          data: { status: "APPROVED" },
+        });
+      }
 
-    // 5. Send Welcome Email
-    await sendWelcomeEmail({
-      parentEmail: registration.parentEmail,
-      parentName: registration.parentName,
-      studentName: registration.studentName,
-      studentId: studentId,
-      programName: registration.course.title,
-      placementTestCode: testCode,
-    });
+      await prisma.registration.update({
+        where: { id: registration.id },
+        data: { status: "PT_ELIGIBLE" },
+      });
 
-    revalidatePath("/admin");
-    return { success: true, studentId, testCode };
+      // Send activation link email to the parent
+      const activationLink = `${process.env.NEXTAUTH_URL || "http://localhost:3000"}/activate?studentId=${studentIdStr}`;
+      const { sendActivationEmail } = await import("@/lib/email");
+      await sendActivationEmail({
+        parentEmail: registration.parentEmail,
+        parentName: registration.parentName,
+        studentName: registration.studentName,
+        studentId: studentIdStr,
+        activationLink,
+      });
+
+      revalidatePath("/admin");
+      return { success: true, isPlacementTest: true, studentId: studentIdStr, testCode };
+    } 
+    
+    if (registration.status === "VERIFYING_ENROLLMENT_PAYMENT" || registration.status === "VERIFYING") {
+      // 2. Course Fee Paid -> Confirm Enrollment
+      if (registration.payment) {
+        await prisma.payment.update({
+          where: { id: registration.payment.id },
+          data: { status: "APPROVED" },
+        });
+      }
+
+      // If registration has a private schedule slot, assign it to the student
+      if (registration.scheduleId) {
+        await prisma.schedule.update({
+          where: { id: registration.scheduleId },
+          data: {
+            studentId: studentUser.id,
+            courseId: registration.courseId,
+            isAvailable: false,
+          },
+        });
+      }
+
+      await prisma.registration.update({
+        where: { id: registration.id },
+        data: { status: "APPROVED" },
+      });
+
+      // Create Active Enrollment
+      const existingEnrollment = await prisma.enrollment.findFirst({
+        where: {
+          studentId: studentUser.id,
+          itemId: registration.courseId,
+        }
+      });
+
+      if (existingEnrollment) {
+        await prisma.enrollment.update({
+          where: { id: existingEnrollment.id },
+          data: { status: "ACTIVE" }
+        });
+      } else {
+        await prisma.enrollment.create({
+          data: {
+            studentId: studentUser.id,
+            itemId: registration.courseId,
+            itemType: "CLASS",
+            status: "ACTIVE",
+          },
+        });
+      }
+
+      // Send Enrollment Confirmation Email
+      await sendEnrollmentConfirmationEmail({
+        parentEmail: registration.parentEmail,
+        studentName: registration.studentName,
+        courseTitle: registration.course.title,
+      });
+
+      revalidatePath("/admin");
+      return { success: true, isPlacementTest: false, studentId: studentIdStr };
+    }
+
+    throw new Error("Registration is not in a verifying state");
   } catch (error: any) {
     console.error("Failed to approve registration:", error);
     return { success: false, error: error.message };
@@ -62,6 +145,18 @@ export async function approveRegistration(registrationId: string) {
 
 export async function rejectRegistration(registrationId: string) {
   try {
+    const registration = await prisma.registration.findUnique({
+      where: { id: registrationId },
+      include: { payment: true },
+    });
+
+    if (registration?.payment) {
+      await prisma.payment.update({
+        where: { id: registration.payment.id },
+        data: { status: "REJECTED" },
+      });
+    }
+
     await prisma.registration.update({
       where: { id: registrationId },
       data: { status: "REJECTED" },

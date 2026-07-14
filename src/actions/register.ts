@@ -1,42 +1,65 @@
 "use server";
 
 import prisma from "@/lib/db";
+import { generateStudentId } from "@/lib/idGenerator";
 import { redirect } from "next/navigation";
 
 export async function submitRegistration(formData: FormData) {
   const studentName = formData.get("studentName") as string;
-  const studentAge = parseInt(formData.get("studentAge") as string, 10);
+  const dateOfBirthStr = formData.get("dateOfBirth") as string;
   const parentName = formData.get("parentName") as string;
   const parentPhone = formData.get("parentPhone") as string;
   const parentEmail = formData.get("parentEmail") as string;
-  const courseId = formData.get("courseId") as string;
 
-  if (!studentName || !studentAge || !parentName || !parentPhone || !parentEmail || !courseId) {
+  if (!studentName || !dateOfBirthStr || !parentName || !parentPhone || !parentEmail) {
     throw new Error("Missing required fields");
   }
 
-  // Create registration
-  const registration = await prisma.registration.create({
+  const dateOfBirth = new Date(dateOfBirthStr);
+  const currentYear = new Date().getFullYear();
+  const dobYear = dateOfBirth.getFullYear();
+  const studentAge = currentYear - dobYear;
+
+  // Generate unique Student ID (e.g. initials + DOB like MDC211006)
+  const studentId = await generateStudentId(studentName, dateOfBirth);
+
+  // Generate unique student virtual email placeholder
+  const virtualEmail = `${studentId.toLowerCase()}@kaputra.local`;
+
+  // Find or create Parent User
+  let parentUser = await prisma.user.findUnique({
+    where: { email: parentEmail },
+  });
+
+  if (!parentUser) {
+    parentUser = await prisma.user.create({
+      data: {
+        name: parentName,
+        email: parentEmail,
+        phone: parentPhone,
+        passwordHash: "", // Blank password until set (or parent doesn't log in directly)
+        role: "PARENT",
+        isActive: false, // Will become verified upon student activation
+      },
+    });
+  }
+
+  // Create inactive Student User
+  await prisma.user.create({
     data: {
-      studentName,
-      studentAge,
-      parentName,
-      parentPhone,
-      parentEmail,
-      courseId,
+      name: studentName,
+      email: virtualEmail,
+      passwordHash: "", // Password created during activation
+      role: "STUDENT",
+      studentIdStr: studentId,
+      parentId: parentUser.id,
+      isActive: false,
+      dateOfBirth: dateOfBirth,
     },
   });
 
-  const course = await prisma.course.findUnique({ where: { id: courseId } });
-  const amount = (course?.price || 0) + (course?.registrationFee || 0);
 
-  // Create payment record
-  const payment = await prisma.payment.create({
-    data: {
-      registrationId: registration.id,
-      amount: amount > 0 ? amount : 500000, 
-    },
-  });
 
-  redirect(`/payment/${payment.id}`);
+  // Redirect to registration page with success query param
+  redirect(`/register?success=true&studentId=${studentId}`);
 }

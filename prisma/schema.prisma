@@ -17,6 +17,9 @@ model User {
   role          String    @default("STUDENT")
   studentIdStr  String?   @unique // e.g., KPA-2026-0001
   parentId      String?   
+  isActive      Boolean   @default(false)
+  acceptedTerms Boolean   @default(false) // For terms & conditions requirement
+  dateOfBirth   DateTime?
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 
@@ -26,6 +29,22 @@ model User {
   enrollments         Enrollment[]
   teachingAssignments TeacherAssignment[]
   verifiedPayments    Payment[]           @relation("PaymentVerifier")
+  invoices            Invoice[]
+  verifiedInvoices    PaymentVerification[] @relation("InvoiceVerifier")
+
+  // New Dashboard Relations
+  mockSubmissions     MockSubmission[]    @relation("MockStudent")
+  academicReports     AcademicReport[]    @relation("ReportStudent")
+  attendanceRecords   Attendance[]        @relation("AttendanceStudent")
+  markedAttendances   Attendance[]        @relation("AttendanceMarker")
+  teacherSchedules    Schedule[]          @relation("ScheduleTeacher")
+  studentSchedules    Schedule[]          @relation("ScheduleStudent")
+  salaries            Salary[]            @relation("SalaryTeacher")
+  announcements       Announcement[]      @relation("AnnouncementTeacher")
+  announcementReads   AnnouncementRead[]  @relation("AnnouncementReadStudent")
+  teacherAttendances  TeacherAttendance[] @relation("TeacherAttendance")
+  targetedAnnouncements Announcement[]    @relation("AnnouncementTargets")
+  reminders           Reminder[]          @relation("ReminderTeacher")
 }
 
 model Category {
@@ -50,14 +69,24 @@ model Course {
   thumbnailUrl     String?
   categoryId       String
   isPublished      Boolean  @default(false)
+  type             String   @default("REGULAR") // "REGULAR" or "COMPETITION"
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
 
   // Relations
   category      Category            @relation(fields: [categoryId], references: [id])
-  enrollments   Enrollment[]
   teachers      TeacherAssignment[]
   registrations Registration[]
+
+  // New Relations
+  videos        Video[]
+  materials     Material[]
+  mockTests     MockTest[]
+  academicReports AcademicReport[]
+  attendances   Attendance[]
+  schedules     Schedule[]
+  announcements Announcement[]
+  reminders     Reminder[]
 }
 
 model TeacherAssignment {
@@ -74,12 +103,15 @@ model TeacherAssignment {
 
 model Registration {
   id                String             @id @default(cuid())
+  studentId         String?            // Link to student User
   studentName       String
   studentAge        Int
   parentName        String
   parentPhone       String
   parentEmail       String
   courseId          String
+  learningMethod    String?            // "SEMI_PRIVATE" or "PRIVATE"
+  scheduleId        String?            // Selected private schedule slot id
   status            String             @default("PENDING_PAYMENT")
   createdAt         DateTime           @default(now())
   updatedAt         DateTime           @updatedAt
@@ -107,34 +139,63 @@ model Payment {
 }
 
 model PlacementTest {
-  id               String       @id @default(cuid())
-  registrationId   String       @unique
-  studentIdStr     String       @unique // e.g., KPA-2026-0001
-  testCode         String       @unique // e.g., PT-KPA-8X3F9Q
-  status           String       @default("NOT_STARTED")
-  expiresAt        DateTime?
-  startedAt        DateTime?
-  submittedAt      DateTime?
-  score            Float?
-  answers          String?      @db.Text // JSON for multiple choice answers
-  createdAt        DateTime     @default(now())
-  updatedAt        DateTime     @updatedAt
+  id                  String       @id @default(cuid())
+  registrationId      String       @unique
+  studentIdStr        String       @unique // e.g., KPA-2026-0001
+  testCode            String       @unique // e.g., PT-KPA-8X3F9Q
+  status              String       @default("NOT_STARTED")
+  expiresAt           DateTime?
+  startedAt           DateTime?
+  submittedAt         DateTime?
+  score               Float?
+  answers             String?      @db.Text // JSON for multiple choice answers
+  qualificationStatus String?      // "QUALIFIED" or "NOT_QUALIFIED"
+  createdAt           DateTime     @default(now())
+  updatedAt           DateTime     @updatedAt
 
   registration     Registration @relation(fields: [registrationId], references: [id])
 }
 
 model Enrollment {
-  id        String           @id @default(cuid())
-  studentId String
-  courseId  String
-  status    String           @default("ACTIVE")
-  createdAt DateTime         @default(now())
-  updatedAt DateTime         @updatedAt
+  id         String   @id @default(cuid())
+  studentId  String
+  itemId     String
+  itemType   String
+  status     String   @default("ACTIVE")
+  enrolledAt DateTime @default(now())
 
-  student   User     @relation(fields: [studentId], references: [id])
-  course    Course   @relation(fields: [courseId], references: [id])
+  student    User     @relation(fields: [studentId], references: [id])
+}
 
-  @@unique([studentId, courseId])
+model Invoice {
+  id                   String    @id @default(cuid())
+  invoiceNumber        String    @unique
+  studentId            String
+  itemId               String
+  itemType             String
+  amount               Float
+  virtualAccountNumber String    @unique
+  status               String    @default("PENDING") // PENDING, WAITING_VERIFICATION, PAID, REJECTED
+  receiptUrl           String?
+  dueDate              DateTime
+  paidAt               DateTime?
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
+
+  student              User      @relation(fields: [studentId], references: [id])
+  verifications        PaymentVerification[]
+}
+
+model PaymentVerification {
+  id              String    @id @default(cuid())
+  invoiceId       String
+  approvedById    String?
+  status          String    @default("PENDING") // APPROVED, REJECTED
+  rejectionReason String?
+  verifiedAt      DateTime?
+
+  invoice         Invoice   @relation(fields: [invoiceId], references: [id])
+  approvedBy      User?     @relation("InvoiceVerifier", fields: [approvedById], references: [id])
 }
 
 model ContentBlock {
@@ -142,4 +203,210 @@ model ContentBlock {
   section   String   @unique // e.g., "hero_slider", "about_us", "contact_info"
   content   String   @db.Text // JSON string payload for CMS content
   updatedAt DateTime @updatedAt
+}
+
+model TrialContent {
+  id          String   @id @default(cuid())
+  type        String   // "VIDEO", "MATERIAL", "MOCK_TEST"
+  title       String
+  url         String?  // file or video link
+  description String?  @db.Text
+  isPublished Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model Video {
+  id          String   @id @default(cuid())
+  courseId    String
+  title       String
+  videoUrl    String
+  category    String?
+  order       Int      @default(0)
+  isPublished Boolean  @default(false)
+  isTrial     Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  course      Course   @relation(fields: [courseId], references: [id], onDelete: Cascade)
+}
+
+model Material {
+  id          String   @id @default(cuid())
+  courseId    String
+  title       String
+  fileUrl     String
+  description String?  @db.Text
+  isPublished Boolean  @default(false)
+  isTrial     Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  course      Course   @relation(fields: [courseId], references: [id], onDelete: Cascade)
+}
+
+model MockTest {
+  id           String   @id @default(cuid())
+  courseId     String?  // Null for general/trial mock tests
+  title        String
+  timeLimit    Int      // in minutes
+  passingScore Float
+  isPublished  Boolean  @default(false)
+  isTrial      Boolean  @default(false)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  course       Course?  @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  questions    MockQuestion[]
+  submissions  MockSubmission[]
+}
+
+model MockQuestion {
+  id           String   @id @default(cuid())
+  mockTestId   String
+  questionText String   @db.Text
+  options      String   // JSON string of options Array
+  correctAnswer String  // the correct answer index or text
+  explanation  String?  @db.Text
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  mockTest     MockTest @relation(fields: [mockTestId], references: [id], onDelete: Cascade)
+}
+
+model MockSubmission {
+  id          String   @id @default(cuid())
+  mockTestId  String
+  studentId   String
+  score       Float
+  answers     String   @db.Text // JSON string of student answers
+  isPassed    Boolean
+  submittedAt DateTime @default(now())
+
+  mockTest    MockTest @relation(fields: [mockTestId], references: [id], onDelete: Cascade)
+  student     User     @relation("MockStudent", fields: [studentId], references: [id], onDelete: Cascade)
+}
+
+model AcademicReport {
+  id               String   @id @default(cuid())
+  studentId        String
+  courseId         String
+  grade            String
+  progress         Int      @default(0)
+  teacherNotes     String?  @db.Text
+  skillAssessment  String?  @db.Text
+  completedModules String?  @db.Text
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  student          User     @relation("ReportStudent", fields: [studentId], references: [id], onDelete: Cascade)
+  course           Course   @relation(fields: [courseId], references: [id], onDelete: Cascade)
+}
+
+model Attendance {
+  id          String   @id @default(cuid())
+  studentId   String
+  courseId    String
+  date        DateTime
+  status      String   // "PRESENT", "LATE", "ABSENT", "EXCUSED"
+  notes       String?  @db.Text
+  markedById  String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  student     User     @relation("AttendanceStudent", fields: [studentId], references: [id], onDelete: Cascade)
+  course      Course   @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  markedBy    User?    @relation("AttendanceMarker", fields: [markedById], references: [id])
+}
+
+model Schedule {
+  id          String   @id @default(cuid())
+  courseId    String?  // Null for general availability
+  teacherId   String
+  studentId   String?  // Null for semi-private or unbooked slots
+  dayOfWeek   String   // MONDAY, TUESDAY, etc.
+  startTime   String   // e.g. "09:00"
+  endTime     String   // e.g. "10:30"
+  type        String   // "PRIVATE" or "SEMI_PRIVATE"
+  isAvailable Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  course      Course?  @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  teacher     User     @relation("ScheduleTeacher", fields: [teacherId], references: [id], onDelete: Cascade)
+  student     User?    @relation("ScheduleStudent", fields: [studentId], references: [id], onDelete: SetNull)
+}
+
+model Salary {
+  id             String   @id @default(cuid())
+  teacherId      String
+  month          String   // e.g. "June 2026"
+  baseSalary     Float
+  bonus          Float    @default(0)
+  status         String   @default("PENDING") // PAID, PENDING
+  receiptUrl     String?
+  paymentDetails String?  @db.Text
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  teacher        User     @relation("SalaryTeacher", fields: [teacherId], references: [id], onDelete: Cascade)
+}
+
+model Announcement {
+  id             String             @id @default(cuid())
+  title          String
+  description    String             @db.Text
+  targetAudience String             // "STUDENTS", "PARENTS", "BOTH"
+  courseId       String?            // Null for general announcements
+  isPublished    Boolean            @default(false)
+  publishDate    DateTime           @default(now())
+  teacherId      String
+  createdAt      DateTime           @default(now())
+  updatedAt      DateTime           @updatedAt
+
+  course         Course?            @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  teacher        User               @relation("AnnouncementTeacher", fields: [teacherId], references: [id], onDelete: Cascade)
+  reads          AnnouncementRead[]
+  targetStudents User[]             @relation("AnnouncementTargets")
+}
+
+model AnnouncementRead {
+  id             String       @id @default(cuid())
+  announcementId String
+  studentId      String
+  readAt         DateTime     @default(now())
+
+  announcement   Announcement @relation(fields: [announcementId], references: [id], onDelete: Cascade)
+  student        User         @relation("AnnouncementReadStudent", fields: [studentId], references: [id], onDelete: Cascade)
+
+  @@unique([announcementId, studentId])
+}
+
+model TeacherAttendance {
+  id           String    @id @default(cuid())
+  teacherId    String
+  date         DateTime
+  checkIn      DateTime?
+  checkOut     DateTime?
+  status       String    // "PRESENT", "ABSENT", "LATE"
+  workingHours Float     @default(0)
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  teacher      User      @relation("TeacherAttendance", fields: [teacherId], references: [id], onDelete: Cascade)
+}
+
+model Reminder {
+  id          String   @id @default(cuid())
+  title       String
+  description String?  @db.Text
+  type        String   // "CLASS_START", "HOMEWORK", "MOCK_TEST", "DEADLINE"
+  dueDate     DateTime?
+  courseId    String?
+  teacherId   String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  course      Course?  @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  teacher     User     @relation("ReminderTeacher", fields: [teacherId], references: [id], onDelete: Cascade)
 }

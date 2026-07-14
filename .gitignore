@@ -46,3 +46,10 @@ prisma/dev.db
 
 # recovery codes
 recoverycodes.txt
+
+# local development scratch/utility files
+build.log
+check-db.js
+scratch_courses.js
+seed-new-features.js
+

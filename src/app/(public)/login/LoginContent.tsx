@@ -40,36 +40,30 @@ export default function LoginContent() {
             setError("Invalid credentials. Please try again.");
             setLoading(false);
         } else {
+            // Fetch session to check the user's role
             const sessionRes = await fetch("/api/auth/session");
-            const session = await sessionRes.json();
+            const sessionData = await sessionRes.json();
+            
             setLoading(false);
-
-            if (session?.user?.role) {
-                const role = session.user.role;
-
-                if (role === "ADMIN") {
-                    router.push("/admin");
-                } else if (role === "STUDENT") {
-                    router.push("/student");
-                } else if (role === "PARENT") {
-                    router.push("/parent");
-                } else if (role === "TEACHER") {
-                    router.push("/teacher");
-                } else {
-                    router.push("/");
-                }
+            
+            if (sessionData?.user?.role === "ADMIN") {
+                router.push("/admin");
+            } else if (sessionData?.user?.role === "TEACHER") {
+                router.push("/teacher");
             } else {
                 router.push("/");
             }
+            
+            router.refresh();
         }
     };
 
     return (
-        <main className="min-h-screen bg-[#072147] flex items-center justify-center px-4 py-12">
-            <div className="max-w-md w-full bg-slate-900 border border-slate-800 shadow-2xl rounded-3xl p-8 text-white space-y-6">
+        <main className="min-h-screen bg-gray-50 flex items-center justify-center px-4 py-12">
+            <div className="max-w-md w-full bg-white border border-gray-100 shadow-xl rounded-2xl p-8 text-slate-900 space-y-6">
                 <div className="text-center">
                     <Link href="/" className="inline-block mb-3">
-                        <span className="text-2xl font-black tracking-wide text-white block">
+                        <span className="text-2xl font-black tracking-wide text-[#072147] block">
                             KAPUTRA
                         </span>
                         <span className="text-xs font-semibold tracking-[0.2em] text-[#CA8E25] uppercase">
@@ -77,20 +71,23 @@ export default function LoginContent() {
                         </span>
                     </Link>
 
-                    <h2 className="text-xl font-bold mt-2">
-                        Sign in to your account
+                    <h2 className="text-3xl font-extrabold text-[#072147] mt-2">
+                        Sign In
                     </h2>
+                    <p className="mt-2 text-sm text-gray-600">
+                        Please fill out details to access your portal.
+                    </p>
                 </div>
 
                 {error && (
-                    <div className="bg-rose-500/10 border border-rose-500/20 text-rose-400 p-4 rounded-xl text-sm flex items-start gap-2">
+                    <div className="bg-rose-50 border border-rose-200 text-rose-600 p-4 rounded-xl text-sm flex items-start gap-2">
                         <AlertCircle className="h-5 w-5 shrink-0" />
                         <span>{error}</span>
                     </div>
                 )}
 
                 {success && (
-                    <div className="bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 p-4 rounded-xl text-sm flex items-start gap-2">
+                    <div className="bg-emerald-50 border border-emerald-200 text-emerald-700 p-4 rounded-xl text-sm flex items-start gap-2">
                         <CheckCircle2 className="h-5 w-5 shrink-0" />
                         <span>{success}</span>
                     </div>
@@ -98,8 +95,8 @@ export default function LoginContent() {
 
                 <form onSubmit={handleSubmit} className="space-y-4">
                     <div className="space-y-1.5">
-                        <Label htmlFor="username">
-                            Username, Email, or Student ID
+                        <Label htmlFor="username" className="text-slate-700 font-medium">
+                            Student ID or Email
                         </Label>
 
                         <Input
@@ -108,14 +105,14 @@ export default function LoginContent() {
                             required
                             value={username}
                             onChange={(e) => setUsername(e.target.value)}
-                            placeholder="e.g. KPA-2026-0001 or parent@example.com"
-                            className="bg-slate-950 border-slate-800 text-white rounded-xl placeholder:text-slate-700 focus-visible:ring-[#CA8E25]"
+                            placeholder="e.g. MDC211006 or teacher@kaputra.academy"
+                            className="bg-white border-gray-200 text-slate-900 rounded-xl placeholder:text-gray-400 focus-visible:ring-[#CA8E25]"
                         />
                     </div>
 
                     <div className="space-y-1.5">
                         <div className="flex items-center justify-between">
-                            <Label htmlFor="password">Password</Label>
+                            <Label htmlFor="password" className="text-slate-700 font-medium">Password</Label>
                         </div>
 
                         <Input
@@ -125,7 +122,7 @@ export default function LoginContent() {
                             value={password}
                             onChange={(e) => setPassword(e.target.value)}
                             placeholder="••••••••"
-                            className="bg-slate-950 border-slate-800 text-white rounded-xl placeholder:text-slate-700 focus-visible:ring-[#CA8E25]"
+                            className="bg-white border-gray-200 text-slate-900 rounded-xl placeholder:text-gray-400 focus-visible:ring-[#CA8E25]"
                         />
                     </div>
 
